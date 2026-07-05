@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Roslyn analyzers MUST target netstandard2.0 — the compiler host may
+         be any runtime and the analyzer assembly must load in process. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- Suppress the default inclusion of the analyzer assembly as a
+         compile-time library reference. Loaded as an analyzer, not a lib. -->
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <DevelopmentDependency>true</DevelopmentDependency>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>SurrealForge.Analyzer</PackageId>
+    <Authors>SurrealForge Contributors</Authors>
+    <Company>SurrealForge</Company>
+    <Description>Roslyn analyzer (SRDB0001) that bans string-interpolated / concatenated SurrealQL outside the parameterized query builder.</Description>
+    <RepositoryUrl>https://github.com/JadeZaher/surrealforge</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/JadeZaher/surrealforge</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>surrealdb;analyzer;roslyn</PackageTags>
+    <IsPackable>true</IsPackable>
+    <IsPublishable>true</IsPublishable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Roslyn SDK — PrivateAssets=all so it is NOT forwarded to consumers. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!-- Release-tracking files consumed by RS2008 (Microsoft.CodeAnalysis.Analyzers).
+       Mark as AdditionalFiles so the analyzers can read them at compile time. -->
+  <ItemGroup>
+    <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
+    <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
+  </ItemGroup>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       Companion-package wiring per Microsoft's Roslyn analyzer-and-code-aware-
+       library package authoring guidance:
+       https://learn.microsoft.com/en-us/visualstudio/extensibility/roslyn-analyzers-and-code-aware-library-for-package-authors
+       The analyzer DLL ships as an analyzer asset under analyzers/dotnet/cs/
+       inside the .nupkg — Roslyn picks it up automatically when consumers
+       PackageReference this assembly. IncludeBuildOutput=false (above) ensures
+       it is NOT also exposed as a compile-time library reference.
+       ═══════════════════════════════════════════════════════════════════ -->
+  <ItemGroup>
+    <None Include="$(OutputPath)\$(AssemblyName).dll"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false" />
+  </ItemGroup>
+
+</Project>

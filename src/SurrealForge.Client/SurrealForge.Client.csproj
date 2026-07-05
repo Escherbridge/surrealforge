@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Multi-target so consumers on .NET Framework / netstandard tooling
+         (analyzers, build tasks, CLI utilities) can reference the same
+         package as net10.0 production consumers. -->
+    <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- 1591 = missing XML doc comments; tolerated while internal. -->
+    <NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
+
+  <!-- Package metadata. IsPackable=true so `dotnet pack` produces a .nupkg
+       for internal-feed distribution; IsPublishable=false guarded against
+       accidental `dotnet nuget push` until the publish decision is made. -->
+  <PropertyGroup>
+    <PackageId>SurrealForge.Client</PackageId>
+    <Authors>SurrealForge Contributors</Authors>
+    <Company>SurrealForge</Company>
+    <Description>Homebake SurrealDB client: HTTP transport, parameterized query builder, transactions, multi-statement response model, JSON converters.</Description>
+    <RepositoryUrl>https://github.com/JadeZaher/surrealforge</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/JadeZaher/surrealforge</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>surrealdb;database</PackageTags>
+    <IsPackable>true</IsPackable>
+    <IsPublishable>true</IsPublishable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- System.Text.Json on netstandard2.0 is not in-box; net8.0 has it built-in. -->
+    <PackageReference Include="System.Text.Json" Version="8.0.5" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
+    <!-- IAsyncDisposable for netstandard2.0 (built-in on net8.0). -->
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="8.0.0" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
+    <!-- System.Threading.Channels (live-query demux) on netstandard2.0; in-box on net8.0. -->
+    <PackageReference Include="System.Threading.Channels" Version="8.0.0" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
+  </ItemGroup>
+
+</Project>

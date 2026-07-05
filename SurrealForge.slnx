@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SurrealForge.Analyzer/SurrealForge.Analyzer.csproj" />
+    <Project Path="src/SurrealForge.Client/SurrealForge.Client.csproj" />
+    <Project Path="src/SurrealForge.Schema/SurrealForge.Schema.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SurrealForge.Analyzer.Tests/SurrealForge.Analyzer.Tests.csproj" />
+    <Project Path="tests/SurrealForge.Client.IntegrationTests/SurrealForge.Client.IntegrationTests.csproj" />
+    <Project Path="tests/SurrealForge.Client.Tests/SurrealForge.Client.Tests.csproj" />
+    <Project Path="tests/SurrealForge.Schema.Tests/SurrealForge.Schema.Tests.csproj" />
+  </Folder>
+</Solution>

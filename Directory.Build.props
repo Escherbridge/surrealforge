@@ -1,0 +1,26 @@
+<Project>
+
+  <!-- Single source of truth for version + shared package metadata across all
+       SurrealForge packages. Per-project csproj override anything set here. -->
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <Authors>SurrealForge Contributors</Authors>
+    <Company>SurrealForge</Company>
+    <Product>SurrealForge</Product>
+    <Copyright>Copyright (c) 2026 Escherbridge</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/Escherbridge/surrealforge</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/Escherbridge/surrealforge</PackageProjectUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+  </PropertyGroup>
+
+  <!-- Deterministic + source-linked builds for reproducible NuGet packages. -->
+  <PropertyGroup>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+
+</Project>

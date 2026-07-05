@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Restore
+        run: dotnet restore SurrealForge.slnx
+
+      - name: Build
+        run: dotnet build SurrealForge.slnx -c Release --no-restore
+
+      # Integration tests need a live SurrealDB and self-skip without one,
+      # so the default filter excludes them from the hosted CI run.
+      - name: Test (unit)
+        run: >
+          dotnet test SurrealForge.slnx -c Release --no-build
+          --filter "FullyQualifiedName!~IntegrationTests"

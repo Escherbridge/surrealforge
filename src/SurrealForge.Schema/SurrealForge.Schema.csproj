@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Multi-target so the Schema package can be referenced from both the
+         netstandard2.0 analyzer and net10.0 production code. The CLI tool
+         (PackAsTool) packages the net10.0 build only; netstandard2.0 stays a
+         library-only build with the CLI Program.cs excluded. -->
+    <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
+
+  <!-- CLI tool packaging: only meaningful on net10.0 (the executable target). -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <OutputType>Exe</OutputType>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>surrealforge</ToolCommandName>
+    <RootNamespace>SurrealForge.Schema</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Exclude the CLI entry point, HTTP adapter, and reset command from the
+       netstandard2.0 build: Task<int> Main and HttpClient APIs are not
+       first-class on netstandard2.0, and library consumers never need them. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <Compile Remove="Program.cs" />
+    <Compile Remove="Cli\HttpConnectionAdapter.cs" />
+    <Compile Remove="Cli\ResetCommand.cs" />
+  </ItemGroup>
+
+  <!-- System.Text.Json is in-box on net10.0; explicit on netstandard2.0. Versions
+       match SurrealForge.Client so the solution restores one set of assemblies. -->
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="8.0.5" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
+  </ItemGroup>
+
+  <!-- The C#-first attribute scanner (Generator/AttributeSchemaScanner.cs)
+       reflects over POCOs decorated with attributes declared in
+       SurrealForge.Client. Pulled in as a normal project reference so
+       both netstandard2.0 and net8.0 builds can resolve the attribute types. -->
+  <ItemGroup>
+    <ProjectReference Include="..\SurrealForge.Client\SurrealForge.Client.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <PackageId>SurrealForge.Schema</PackageId>
+    <Authors>SurrealForge Contributors</Authors>
+    <Company>SurrealForge</Company>
+    <Description>Mermaid-ER schema source-of-truth, .surql generator, and migration runner for SurrealDB.</Description>
+    <RepositoryUrl>https://github.com/JadeZaher/surrealforge</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/JadeZaher/surrealforge</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>surrealdb;schema;migration;mermaid</PackageTags>
+    <IsPackable>true</IsPackable>
+    <IsPublishable>true</IsPublishable>
+  </PropertyGroup>
+
+</Project>

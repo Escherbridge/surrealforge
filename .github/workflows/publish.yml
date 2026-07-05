@@ -1,0 +1,43 @@
+name: Publish
+
+# Publishes all three packages to NuGet.org in lockstep.
+# Trigger by publishing a GitHub Release (tag like v0.1.0), or manually.
+# Requires repository secret: NUGET_API_KEY
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Restore
+        run: dotnet restore SurrealForge.slnx
+
+      - name: Build
+        run: dotnet build SurrealForge.slnx -c Release --no-restore
+
+      - name: Pack
+        run: |
+          dotnet pack src/SurrealForge.Client/SurrealForge.Client.csproj     -c Release --no-build -o artifacts
+          dotnet pack src/SurrealForge.Schema/SurrealForge.Schema.csproj     -c Release --no-build -o artifacts
+          dotnet pack src/SurrealForge.Analyzer/SurrealForge.Analyzer.csproj -c Release --no-build -o artifacts
+
+      - name: Push to NuGet
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: >
+          dotnet nuget push "artifacts/*.nupkg"
+          --api-key "$NUGET_API_KEY"
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
