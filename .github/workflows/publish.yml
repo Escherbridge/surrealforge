@@ -1,12 +1,18 @@
 name: Publish
 
-# Publishes all three packages to NuGet.org in lockstep.
+# Publishes all three packages to NuGet.org in lockstep via NuGet Trusted
+# Publishing (OIDC) — no long-lived API key. Requires a trusted-publishing
+# policy on nuget.org for owner `jadeoni`, repo `Escherbridge/surrealforge`,
+# workflow file `publish.yml`.
 # Trigger by publishing a GitHub Release (tag like v0.1.0), or manually.
-# Requires repository secret: NUGET_API_KEY
 on:
   release:
     types: [published]
   workflow_dispatch:
+
+permissions:
+  id-token: write   # required for the OIDC token exchange
+  contents: read
 
 jobs:
   publish:
@@ -33,11 +39,16 @@ jobs:
           dotnet pack src/SurrealForge.Schema/SurrealForge.Schema.csproj     -c Release --no-build -o artifacts
           dotnet pack src/SurrealForge.Analyzer/SurrealForge.Analyzer.csproj -c Release --no-build -o artifacts
 
+      # Exchanges the GitHub OIDC token for a short-lived NuGet API key.
+      - name: NuGet trusted-publishing login
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: jadeoni
+
       - name: Push to NuGet
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: >
           dotnet nuget push "artifacts/*.nupkg"
-          --api-key "$NUGET_API_KEY"
+          --api-key "${{ steps.login.outputs.NUGET_API_KEY }}"
           --source https://api.nuget.org/v3/index.json
           --skip-duplicate
