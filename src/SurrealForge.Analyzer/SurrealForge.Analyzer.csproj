@@ -10,6 +10,9 @@
     <!-- Suppress the default inclusion of the analyzer assembly as a
          compile-time library reference. Loaded as an analyzer, not a lib. -->
     <IncludeBuildOutput>false</IncludeBuildOutput>
+    <!-- Analyzer ships no compile-time lib output, so there's nothing to
+         symbolize; disabling symbol packages avoids NU5017 on `dotnet pack`. -->
+    <IncludeSymbols>false</IncludeSymbols>
     <DevelopmentDependency>true</DevelopmentDependency>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <IsRoslynComponent>true</IsRoslynComponent>
