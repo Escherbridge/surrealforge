@@ -21,9 +21,9 @@
     <Authors>SurrealForge Contributors</Authors>
     <Company>SurrealForge</Company>
     <Description>Homebake SurrealDB client: HTTP transport, parameterized query builder, transactions, multi-statement response model, JSON converters.</Description>
-    <RepositoryUrl>https://github.com/JadeZaher/surrealforge</RepositoryUrl>
+    <RepositoryUrl>https://github.com/Escherbridge/surrealforge</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageProjectUrl>https://github.com/JadeZaher/surrealforge</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/Escherbridge/surrealforge</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>surrealdb;database</PackageTags>
     <IsPackable>true</IsPackable>

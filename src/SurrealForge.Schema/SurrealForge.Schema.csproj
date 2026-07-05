@@ -49,9 +49,9 @@
     <Authors>SurrealForge Contributors</Authors>
     <Company>SurrealForge</Company>
     <Description>Mermaid-ER schema source-of-truth, .surql generator, and migration runner for SurrealDB.</Description>
-    <RepositoryUrl>https://github.com/JadeZaher/surrealforge</RepositoryUrl>
+    <RepositoryUrl>https://github.com/Escherbridge/surrealforge</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageProjectUrl>https://github.com/JadeZaher/surrealforge</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/Escherbridge/surrealforge</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>surrealdb;schema;migration;mermaid</PackageTags>
     <IsPackable>true</IsPackable>

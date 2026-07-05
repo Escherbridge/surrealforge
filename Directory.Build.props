@@ -3,7 +3,7 @@
   <!-- Single source of truth for version + shared package metadata across all
        SurrealForge packages. Per-project csproj override anything set here. -->
   <PropertyGroup>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Authors>SurrealForge Contributors</Authors>
     <Company>SurrealForge</Company>
     <Product>SurrealForge</Product>
@@ -13,7 +13,14 @@
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>https://github.com/Escherbridge/surrealforge</PackageProjectUrl>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <!-- Embed the repo README into each package so nuget.org renders it.
+       Test projects (IsPackable=false) don't pack, so the item is harmless there. -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
 
   <!-- Deterministic + source-linked builds for reproducible NuGet packages. -->
   <PropertyGroup>

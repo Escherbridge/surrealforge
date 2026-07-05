@@ -25,9 +25,9 @@
     <Authors>SurrealForge Contributors</Authors>
     <Company>SurrealForge</Company>
     <Description>Roslyn analyzer (SRDB0001) that bans string-interpolated / concatenated SurrealQL outside the parameterized query builder.</Description>
-    <RepositoryUrl>https://github.com/JadeZaher/surrealforge</RepositoryUrl>
+    <RepositoryUrl>https://github.com/Escherbridge/surrealforge</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageProjectUrl>https://github.com/JadeZaher/surrealforge</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/Escherbridge/surrealforge</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageTags>surrealdb;analyzer;roslyn</PackageTags>
     <IsPackable>true</IsPackable>
