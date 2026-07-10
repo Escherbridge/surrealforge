@@ -182,6 +182,45 @@ You can also convert a typed `SurrealContext` query into a live subscription via
 `ExecuteLiveAsync<T>(socket)`. See **Live queries: status** below for maturity
 and current limitations.
 
+## Idempotency ledger
+
+`SurrealForge.Client.Idempotency` ships an exactly-once execution ledger for
+irreversible operations, backed by a SurrealDB table with a UNIQUE index on the
+key (`SurrealIdempotencyLedger` — `TryClaimAsync` / `CompleteAsync` /
+`FailAsync` / `GetAsync`). Behaviour that used to live in each consuming app is
+now folded into the package and turned on through options:
+
+```csharp
+using SurrealForge.Client.Idempotency;
+
+var ledger = new SurrealIdempotencyLedger(executor, new IdempotencyLedgerOptions
+{
+    // Retry the claim on SurrealDB 3.x RocksDB transient write-write conflicts
+    // ("Transaction conflict: Resource busy … can be retried"). Off by default.
+    RetryOnTransientConflict = true,
+    MaxConflictRetries       = 8,
+
+    // Base64url-encode stored keys that contain a ':' (the record-id separator),
+    // transparently decoded on read. Off by default; the deterministic record id
+    // is always SHA-256 of the ORIGINAL key.
+    EncodeColonKeys = true,
+});
+
+// Or bind from appsettings.json under SurrealDb:Idempotency:
+services.Configure<IdempotencyLedgerOptions>(config.GetSection("SurrealDb:Idempotency"));
+```
+
+Two more application-agnostic helpers round out the surface:
+
+- **`SurrealTransientConflict`** — the standalone bounded retry primitive
+  (`RetryOnConflictAsync` + `IsRetryableConflict`) for any contended
+  single-winner claim, usable independently of the ledger.
+- **`IdempotencyReplay`** — the content-hash key (`ContentHash`), the JSON
+  round-trip (`SerializeForReplay` / `DeserializeForReplay`), and the replay
+  state machine (`ReplayFromRecord`). The state machine is generic over your own
+  result envelope via `IReplayResultFactory<T, TResult>` (or two lambdas), so
+  the package never depends on any app's result type.
+
 ## Schema as C# — source of truth
 
 Decorate POCOs with the schema attributes from `SurrealForge.Client`; the

@@ -51,9 +51,11 @@ namespace SurrealForge.Client.Idempotency
 
         private readonly ISurrealExecutor _executor;
         private readonly string _table;
+        private readonly IdempotencyLedgerOptions _options;
 
         /// <summary>
-        /// Creates a ledger over the given executor and table.
+        /// Creates a ledger over the given executor and table with default
+        /// options (no retry, no key encoding).
         /// </summary>
         /// <param name="executor">The SurrealDB executor used for all queries.</param>
         /// <param name="table">
@@ -61,11 +63,23 @@ namespace SurrealForge.Client.Idempotency
         /// (<c>idempotency_key_store</c>).
         /// </param>
         public SurrealIdempotencyLedger(ISurrealExecutor executor, string table = DefaultTable)
+            : this(executor, new IdempotencyLedgerOptions { Table = table })
+        {
+        }
+
+        /// <summary>
+        /// Creates a ledger over the given executor, configured by
+        /// <paramref name="options"/>. This is the config-driven entry point:
+        /// transient-conflict retry and colon-key encoding are turned on and
+        /// tuned here (see <see cref="IdempotencyLedgerOptions"/>).
+        /// </summary>
+        public SurrealIdempotencyLedger(ISurrealExecutor executor, IdempotencyLedgerOptions options)
         {
             _executor = executor ?? throw new ArgumentNullException(nameof(executor));
-            if (string.IsNullOrWhiteSpace(table))
-                throw new ArgumentException("Ledger table name must be non-empty.", nameof(table));
-            _table = table;
+            if (options == null) throw new ArgumentNullException(nameof(options));
+            options.Validate();
+            _options = options;
+            _table = options.Table;
         }
 
         // ── TryClaimAsync ──────────────────────────────────────────────────────
@@ -77,7 +91,7 @@ namespace SurrealForge.Client.Idempotency
         /// (concurrent/duplicate request) re-reads and returns <c>Won=false</c>
         /// with the existing record.
         /// </summary>
-        public async Task<IdempotencyClaim> TryClaimAsync(
+        public Task<IdempotencyClaim> TryClaimAsync(
             string key,
             string operationType,
             CancellationToken ct)
@@ -85,6 +99,25 @@ namespace SurrealForge.Client.Idempotency
             if (string.IsNullOrWhiteSpace(key))
                 throw new ArgumentException("Idempotency key must be non-empty.", nameof(key));
 
+            // Config-gated: wrap the claim in the bounded transient-conflict
+            // retry loop only when the consumer opted in. The default is the
+            // plain single-attempt claim.
+            if (_options.RetryOnTransientConflict)
+            {
+                return SurrealTransientConflict.RetryOnConflictAsync(
+                    () => TryClaimOnceAsync(key, operationType, ct),
+                    ct,
+                    _options.MaxConflictRetries);
+            }
+
+            return TryClaimOnceAsync(key, operationType, ct);
+        }
+
+        private async Task<IdempotencyClaim> TryClaimOnceAsync(
+            string key,
+            string operationType,
+            CancellationToken ct)
+        {
             var recordId = DeterministicId(key);
             var now      = DateTimeOffset.UtcNow;
 
@@ -99,7 +132,7 @@ namespace SurrealForge.Client.Idempotency
             // index on `key` with status="ERR" in the per-statement slot.
             // We use ExecuteAsync (not QueryAsync) so the ERR is surfaced as
             // response[0].IsOk == false rather than thrown.
-            var content = BuildContentDict(recordId, key, operationType, now);
+            var content = BuildContentDict(recordId, StoreKey(key), operationType, now);
             var insertQ = SurrealQuery
                 .Of("CREATE type::record($_t, $_id) CONTENT $_content RETURN AFTER")
                 .WithParam("_t",       _table)
@@ -352,12 +385,13 @@ namespace SurrealForge.Client.Idempotency
             };
         }
 
-        /// <summary>Maps the internal row POCO to the public package record.</summary>
-        private static IdempotencyRecord ToRecord(IdempotencyKeyRow r)
+        /// <summary>Maps the internal row POCO to the public package record,
+        /// restoring the original key when colon-key encoding is enabled.</summary>
+        private IdempotencyRecord ToRecord(IdempotencyKeyRow r)
         {
             return new IdempotencyRecord
             {
-                Key           = r.Key,
+                Key           = RestoreKey(r.Key),
                 OperationType = r.OperationType,
                 State         = ParseState(r.State),
                 ResultPayload = r.ResultPayload,
@@ -374,6 +408,55 @@ namespace SurrealForge.Client.Idempotency
             if (string.Equals(state, StateFailed, StringComparison.Ordinal))
                 return IdempotencyState.Failed;
             return IdempotencyState.InProgress;
+        }
+
+        // ── Colon-key encoding (config-gated) ────────────────────────────────
+        //
+        // The deterministic record id is always SHA-256 of the ORIGINAL key, so
+        // encoding only rewrites the value stored in the `key` column. A raw
+        // colon is the SurrealDB record-id separator and trips up query/id
+        // ergonomics, so keys containing ':' are stored base64url-encoded under
+        // an unambiguous prefix and restored on read. Keys without a colon (and
+        // the whole feature when disabled) pass through verbatim.
+
+        /// <summary>Encodes a key for storage when colon-key encoding is enabled
+        /// and the key contains a colon; otherwise returns it unchanged.</summary>
+        private string StoreKey(string key)
+        {
+            if (!_options.EncodeColonKeys) return key;
+            if (key.IndexOf(':') < 0) return key;
+
+            var payload = Convert.ToBase64String(Encoding.UTF8.GetBytes(key))
+                .TrimEnd('=')
+                .Replace('+', '-')
+                .Replace('/', '_');
+            return _options.EncodedKeyPrefix + payload;
+        }
+
+        /// <summary>Inverse of <see cref="StoreKey"/>: restores the original key
+        /// from a stored value. Non-encoded values pass through; malformed
+        /// payloads are returned verbatim rather than throwing.</summary>
+        private string RestoreKey(string stored)
+        {
+            if (!_options.EncodeColonKeys) return stored;
+            var prefix = _options.EncodedKeyPrefix;
+            if (string.IsNullOrEmpty(prefix) ||
+                !stored.StartsWith(prefix, StringComparison.Ordinal))
+                return stored;
+
+            try
+            {
+                var payload = stored.Substring(prefix.Length)
+                    .Replace('-', '+')
+                    .Replace('_', '/');
+                var padding = (4 - payload.Length % 4) % 4;
+                if (padding > 0) payload = payload.PadRight(payload.Length + padding, '=');
+                return Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+            }
+            catch (FormatException)
+            {
+                return stored;
+            }
         }
     }
 }

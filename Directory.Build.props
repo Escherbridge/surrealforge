@@ -3,7 +3,7 @@
   <!-- Single source of truth for version + shared package metadata across all
        SurrealForge packages. Per-project csproj override anything set here. -->
   <PropertyGroup>
-    <Version>0.1.1</Version>
+    <Version>0.2.0</Version>
     <Authors>SurrealForge Contributors</Authors>
     <Company>SurrealForge</Company>
     <Product>SurrealForge</Product>
