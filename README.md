@@ -14,7 +14,7 @@ Framework tooling to the latest runtime.
 | Package | Target | What it does |
 |---|---|---|
 | [`SurrealForge.Client`](src/SurrealForge.Client) | `netstandard2.0;net10.0` | HTTP transport (`POST /sql`), a **parameterized** `SurrealQuery` builder, a `SurrealIdentifier` reserved-word denylist, multi-statement composition, explicit `BeginTransactionAsync()`, JSON converters (with `JsonStringEnumConverter` on by default), and a connection pool with jittered retry. |
-| [`SurrealForge.Schema`](src/SurrealForge.Schema) | `netstandard2.0;net10.0` (+ CLI on `net10.0`) | Mermaid-ER parser, `.surql` generator, migration runner backed by a `schema_migration` checksum table, and the `surrealforge` dotnet tool (`migrate up\|status\|dry-run`, `generate <file>`, `validate <file>`). |
+| [`SurrealForge.Schema`](src/SurrealForge.Schema) | `netstandard2.0;net10.0` (+ CLI on `net10.0`) | Mermaid-ER parser, `.surql` generator, migration runner backed by a `schema_migration` checksum table, **model-driven reconcile** (live introspection + diff + `DEFINE … OVERWRITE` field evolution), and the `surrealforge` dotnet tool (`up`, `migrate up\|status\|dry-run`, `generate <file>`, `validate <file>`). |
 | [`SurrealForge.Analyzer`](src/SurrealForge.Analyzer) | `netstandard2.0` | Roslyn analyzer **SRDB0001** (error severity) — bans string-interpolated / concatenated SurrealQL outside the safe query-builder layer, with one-hop variable resolution to close the most common bypass. |
 
 ## Install
@@ -233,6 +233,40 @@ surrealforge generate-from-assembly path/to/YourApp.dll
 surrealforge migrate up --endpoint http://127.0.0.1:8000
 ```
 
+### Model-driven migrations — evolving an existing field
+
+The checksum-tracked file applier can **create** tables/fields, but the
+idempotent `DEFINE … IF NOT EXISTS` it emits can never **alter** an existing
+one — so a change like `option<string>` → `array<string>` on a live table used
+to silently no-op. `surrealforge up` now closes that gap with a **reconcile**
+pass:
+
+1. introspect the live schema (`INFO FOR DB` / `INFO FOR TABLE`) into the same
+   model shape the C# scanner produces,
+2. diff it against the desired model (parsed from the generated `.surql`, or
+   from `--assembly <dll>`),
+3. emit `DEFINE FIELD OVERWRITE … TYPE <new>` for each drifted field/index and
+   apply it — `OVERWRITE` **replaces** the definition, so the type actually
+   evolves.
+
+```bash
+# Apply schema files + migrations, THEN reconcile drifted field types/defaults:
+surrealforge up --connection http://127.0.0.1:8000 \
+                --namespace app --database main \
+                --schemas-dir ./Schemas --migrations-dir ./Migrations
+
+surrealforge up ... --dry-run            # print the OVERWRITE plan, write nothing
+surrealforge up ... --allow-destructive  # also apply drops / narrowing type changes
+surrealforge up ... --no-reconcile       # legacy additive-only apply (skip reconcile)
+```
+
+Reconcile runs by default; `--force` guarantees it. Destructive changes
+(field/table/index removal, narrowing type changes) are planned but **skipped**
+unless `--allow-destructive` is set. If existing row data can't coerce to a new
+type, the apply fails with a clear `SchemaCoercionException` (exit code 4)
+naming the field — never a silent corruption. See
+[`src/SurrealForge.Schema/Migration/AGENTS.md`](src/SurrealForge.Schema/Migration/AGENTS.md).
+
 ## Building from source
 
 ```bash
@@ -258,7 +292,11 @@ MIT — see [LICENSE](LICENSE).
 
 ## Status
 
-`0.1.0` — early release. The public API may still shift before `1.0`.
+`0.3.0` — adds model-driven reconcile (live introspection + diff + `DEFINE …
+OVERWRITE` field evolution) to `SurrealForge.Schema`. Additive, backwards
+compatible: existing additive-migration users are unaffected (reconcile is a
+no-op when the live schema already matches the model, and `--no-reconcile`
+opts out). The public API may still shift before `1.0`.
 
 Known limitations / roadmap:
 

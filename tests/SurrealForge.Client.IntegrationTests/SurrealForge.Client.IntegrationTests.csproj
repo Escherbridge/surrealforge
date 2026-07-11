@@ -27,6 +27,10 @@
   <ItemGroup>
     <Using Include="Xunit" />
     <ProjectReference Include="../../src/SurrealForge.Client/SurrealForge.Client.csproj" />
+    <!-- Schema package is exercised here by the model-driven reconcile
+         regression test (LiveReconcileTests) — it drives introspect+diff+
+         OVERWRITE against the live instance via the Schema HttpConnectionAdapter. -->
+    <ProjectReference Include="../../src/SurrealForge.Schema/SurrealForge.Schema.csproj" />
   </ItemGroup>
 
 </Project>

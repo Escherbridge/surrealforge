@@ -65,6 +65,11 @@ namespace SurrealForge.Schema
                 Console.Error.WriteLine(ex.Message);
                 return 2;
             }
+            catch (SchemaCoercionException ex)
+            {
+                Console.Error.WriteLine("schema evolution blocked: " + ex.Message);
+                return 4;
+            }
             catch (MigrationApplyException ex)
             {
                 Console.Error.WriteLine("apply failed: " + ex.Message);
@@ -145,13 +150,17 @@ namespace SurrealForge.Schema
 
         // ── up ─────────────────────────────────────────────────────────────
         // Composite apply: Schemas/ first (DDL), then Migrations/ (hand-authored
-        // data + one-shot fixes). Both flow through the same MigrationRunner
-        // ledger keyed by file name -- re-running is idempotent when nothing
-        // changed. This is the canonical "bring the DB in sync with the schema
-        // + apply any pending data migrations" entry point.
+        // data + one-shot fixes), then a model-driven RECONCILE pass (Phase 3)
+        // that evolves drifted field types/defaults via DEFINE ... OVERWRITE.
+        // Phases 1-2 flow through the MigrationRunner ledger keyed by file name
+        // (idempotent when unchanged); Phase 3 introspects the live schema and
+        // applies only the OVERWRITE DDL that IF NOT EXISTS cannot express.
+        // This is the canonical "bring the DB in sync with the model" entry
+        // point. See Migration/AGENTS.md.
         //
         //   surrealforge up [--schemas-dir <path>] [--migrations-dir <path>]
-        //                    [--dry-run] [--force]
+        //                    [--dry-run] [--force] [--no-reconcile]
+        //                    [--allow-destructive] [--assembly <dll>]
         private static async Task<int> RunUpAsync(CliArgs cli)
         {
             var schemasDir = cli.Flag("schemas-dir") ?? "Persistence/SurrealDb/Generated/Schemas";
@@ -194,6 +203,13 @@ namespace SurrealForge.Schema
 
             bool dryRun = cli.HasFlag("dry-run");
             bool force = cli.HasFlag("force");
+            // Reconcile (model-driven field evolution) runs by default -- it is
+            // the fix for "a field TYPE change silently never applies". Skip it
+            // only when the operator explicitly opts out (--no-reconcile) for
+            // the legacy additive-only behaviour. --force still guarantees a
+            // reconcile even if --no-reconcile is (contradictorily) also passed.
+            bool reconcile = force || !cli.HasFlag("no-reconcile");
+            bool allowDestructive = cli.HasFlag("allow-destructive");
 
             try
             {
@@ -219,16 +235,111 @@ namespace SurrealForge.Schema
                     Console.WriteLine($"== Phase 2: migrations -- 0 files found under {migrationsDir}");
                 }
 
+                // Phase 3: reconcile. Introspect the live DB, diff against the
+                // desired model (parsed from the emitted .surql schema files or
+                // from --assembly), and apply DEFINE ... OVERWRITE for any
+                // drifted field/index -- the statements IF NOT EXISTS cannot
+                // express. This is what makes a field-TYPE change actually take
+                // effect on deploy.
+                int evolved = 0, evoSkipped = 0;
+                if (reconcile)
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("== Phase 3: reconcile (model-driven field evolution)");
+                    var (e, s) = await RunReconcileAsync(
+                        cli, conn, schemasDir, dryRun, allowDestructive).ConfigureAwait(false);
+                    evolved = e; evoSkipped = s;
+                }
+
                 Console.WriteLine();
                 Console.WriteLine(dryRun
-                    ? $"DRY RUN: would apply {applied}, skip {skipped}, {mismatches} mismatch(es)"
-                    : $"applied {applied}, skipped {skipped}, {mismatches} mismatch(es)");
+                    ? $"DRY RUN: would apply {applied}, skip {skipped}, {mismatches} mismatch(es), {evolved} evolve(s), {evoSkipped} destructive-skipped"
+                    : $"applied {applied}, skipped {skipped}, {mismatches} mismatch(es), evolved {evolved}, destructive-skipped {evoSkipped}");
                 return mismatches > 0 ? 2 : 0;
             }
             finally
             {
                 (conn as IDisposable)?.Dispose();
             }
+        }
+
+        // Phase 3 helper: load the desired model, reconcile the live schema to
+        // it via OVERWRITE DDL, and log the plan. Returns (evolvedCount,
+        // destructiveSkippedCount). Desired-model source: --assembly <dll> when
+        // provided (scans [SurrealTable] POCOs); otherwise the emitted .surql
+        // files under schemasDir.
+        private static async Task<(int evolved, int destructiveSkipped)> RunReconcileAsync(
+            CliArgs cli,
+            ISurrealConnection conn,
+            string schemasDir,
+            bool dryRun,
+            bool allowDestructive)
+        {
+            Model.SchemaModel desired;
+            var assemblyPath = cli.Flag("assembly");
+            if (!string.IsNullOrWhiteSpace(assemblyPath))
+            {
+                if (!File.Exists(assemblyPath))
+                {
+                    Console.Error.WriteLine($"  reconcile: --assembly not found: {assemblyPath} -- skipping reconcile");
+                    return (0, 0);
+                }
+                var asm = Assembly.LoadFrom(Path.GetFullPath(assemblyPath!));
+                desired = AttributeSchemaScanner.ScanTypes(LoadTableTypes(asm));
+            }
+            else
+            {
+                desired = SurqlSchemaReader.ReadDirectory(schemasDir);
+            }
+
+            var reconciler = new ReconcileRunner(conn);
+            var plan = await reconciler.ReconcileAsync(desired, dryRun, allowDestructive).ConfigureAwait(false);
+
+            if (!plan.HasChanges)
+            {
+                Console.WriteLine("  no schema drift -- live matches model.");
+                return (0, 0);
+            }
+
+            foreach (var stmt in plan.Statements)
+            {
+                string verb;
+                if (dryRun) verb = stmt.IsDestructive && !allowDestructive ? "WOULD SKIP (destructive)" : "WOULD EVOLVE";
+                else if (stmt.IsDestructive && !allowDestructive) verb = "SKIP (destructive)";
+                else verb = "EVOLVED";
+                Console.WriteLine($"  {verb}\t{stmt.Reason}");
+            }
+
+            int applied = dryRun
+                ? CountApplicable(plan, allowDestructive)
+                : plan.Applied.Count;
+            int destructiveSkipped = dryRun
+                ? CountDestructiveSkipped(plan, allowDestructive)
+                : plan.SkippedDestructive.Count;
+
+            if (destructiveSkipped > 0)
+            {
+                Console.Error.WriteLine(
+                    $"  {destructiveSkipped} destructive change(s) NOT applied. " +
+                    "Re-run with --allow-destructive to apply drops / narrowing type changes.");
+            }
+            return (applied, destructiveSkipped);
+        }
+
+        private static int CountApplicable(ReconcilePlan plan, bool allowDestructive)
+        {
+            int n = 0;
+            foreach (var s in plan.Statements)
+                if (allowDestructive || !s.IsDestructive) n++;
+            return n;
+        }
+
+        private static int CountDestructiveSkipped(ReconcilePlan plan, bool allowDestructive)
+        {
+            if (allowDestructive) return 0;
+            int n = 0;
+            foreach (var s in plan.Statements) if (s.IsDestructive) n++;
+            return n;
         }
 
         private static void LogPlan(
@@ -463,9 +574,16 @@ namespace SurrealForge.Schema
             Console.WriteLine("Up / reset flags:");
             Console.WriteLine("  --schemas-dir <p>    Generated schemas dir (default: Persistence/SurrealDb/Generated/Schemas)");
             Console.WriteLine("  --migrations-dir <p> Hand-authored migrations dir (default: Persistence/SurrealDb/Migrations)");
-            Console.WriteLine("  --dry-run            Plan without writing (up only)");
-            Console.WriteLine("  --force              Overwrite recorded checksum on mismatch (up only)");
+            Console.WriteLine("  --dry-run            Plan without writing -- prints the reconcile diff plan (up only)");
+            Console.WriteLine("  --force              Overwrite recorded checksum on mismatch AND force a reconcile pass (up only)");
+            Console.WriteLine("  --no-reconcile       Skip Phase 3 model-driven field evolution (legacy additive-only apply)");
+            Console.WriteLine("  --allow-destructive  Apply destructive reconcile changes (field/table/index drops, narrowing type changes)");
+            Console.WriteLine("  --assembly <dll>     Reconcile desired-model source: scan [SurrealTable] POCOs (default: parse schemas-dir .surql)");
             Console.WriteLine("  --applied-by <s>     Identity recorded in schema_migration.applied_by");
+            Console.WriteLine();
+            Console.WriteLine("  Phase 3 reconcile: after applying schema files + migrations, `up` introspects the");
+            Console.WriteLine("  live DB, diffs it against the desired model, and emits DEFINE ... OVERWRITE for any");
+            Console.WriteLine("  drifted field TYPE/DEFAULT/ASSERT/index -- the change IF NOT EXISTS cannot express.");
             Console.WriteLine();
             Console.WriteLine("Migrate flags:");
             Console.WriteLine("  --dir <path>     Dir of .surql files (default: Persistence/SurrealDb/Generated/Schemas)");

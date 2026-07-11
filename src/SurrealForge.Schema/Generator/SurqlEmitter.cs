@@ -76,13 +76,44 @@ namespace SurrealForge.Schema.Generator
             /// </summary>
             public bool Idempotent { get; }
 
-            public EmitOptions(bool idempotent) { Idempotent = idempotent; }
+            /// <summary>
+            /// When true, emit <c>DEFINE TABLE/FIELD/INDEX OVERWRITE</c> — the
+            /// evolve-in-place form. Unlike <c>IF NOT EXISTS</c> (which never
+            /// touches an existing definition), OVERWRITE REPLACES the current
+            /// definition, so a field TYPE / DEFAULT / ASSERT change actually
+            /// applies. This is the fix for the "field-type change silently
+            /// never applies" bug. Takes precedence over
+            /// <see cref="Idempotent"/> when both are set.
+            /// </summary>
+            public bool Overwrite { get; }
+
+            public EmitOptions(bool idempotent) : this(idempotent, overwrite: false) { }
+
+            public EmitOptions(bool idempotent, bool overwrite)
+            {
+                Idempotent = idempotent;
+                Overwrite = overwrite;
+            }
 
             /// <summary>Default emit shape (idempotent).</summary>
-            public static EmitOptions Default => new EmitOptions(idempotent: true);
+            public static EmitOptions Default => new EmitOptions(idempotent: true, overwrite: false);
 
             /// <summary>Strict shape -- DEFINE without IF NOT EXISTS.</summary>
-            public static EmitOptions Strict => new EmitOptions(idempotent: false);
+            public static EmitOptions Strict => new EmitOptions(idempotent: false, overwrite: false);
+
+            /// <summary>Evolve shape -- DEFINE ... OVERWRITE (replaces existing definitions).</summary>
+            public static EmitOptions Evolve => new EmitOptions(idempotent: false, overwrite: true);
+
+            /// <summary>
+            /// Append the correct existence clause (<c>OVERWRITE </c>,
+            /// <c>IF NOT EXISTS </c>, or nothing) after a <c>DEFINE &lt;kind&gt; </c>
+            /// prefix. OVERWRITE wins over Idempotent.
+            /// </summary>
+            internal void AppendExistenceClause(StringBuilder sb)
+            {
+                if (Overwrite) sb.Append("OVERWRITE ");
+                else if (Idempotent) sb.Append("IF NOT EXISTS ");
+            }
         }
 
         /// <summary>
@@ -110,6 +141,32 @@ namespace SurrealForge.Schema.Generator
             return sb.ToString();
         }
 
+        /// <summary>
+        /// Emit a single <c>DEFINE FIELD …</c> statement for one attribute,
+        /// honouring <paramref name="options"/> (use <see cref="EmitOptions.Evolve"/>
+        /// for the OVERWRITE form). This is the diff-apply seam: given a
+        /// type-/constraint-changed field from <see cref="Model.SchemaModel"/>
+        /// via a <c>SchemaDiff</c>, emit the exact DDL that evolves it in place.
+        /// </summary>
+        public static string EmitFieldStatement(string table, SchemaAttribute attr, EmitOptions options)
+        {
+            if (table == null) throw new ArgumentNullException(nameof(table));
+            if (attr == null) throw new ArgumentNullException(nameof(attr));
+            var sb = new StringBuilder();
+            EmitField(sb, table, attr, options);
+            return sb.ToString();
+        }
+
+        /// <summary>Emit a single <c>DEFINE INDEX …</c> statement for one index.</summary>
+        public static string EmitIndexStatement(string table, SchemaIndex idx, EmitOptions options)
+        {
+            if (table == null) throw new ArgumentNullException(nameof(table));
+            if (idx == null) throw new ArgumentNullException(nameof(idx));
+            var sb = new StringBuilder();
+            EmitIndex(sb, table, idx, options);
+            return sb.ToString();
+        }
+
         private static void EmitEntity(StringBuilder sb, SchemaEntity entity, EmitOptions options)
         {
             EmitEntityHeader(sb, entity);
@@ -127,7 +184,7 @@ namespace SurrealForge.Schema.Generator
             bool isSchemafull = HasDirective(entity.Annotations, "schemafull");
             var relation = FindAnnotation(entity.Annotations, "relation");
             sb.Append("DEFINE TABLE ");
-            if (options.Idempotent) sb.Append("IF NOT EXISTS ");
+            options.AppendExistenceClause(sb);
             sb.Append(entity.Name);
             if (relation != null)
             {
@@ -225,7 +282,7 @@ namespace SurrealForge.Schema.Generator
                     sb.Append("-- ").Append(csEnum).Append('\n');
                 }
                 sb.Append("DEFINE PARAM ");
-                if (options.Idempotent) sb.Append("IF NOT EXISTS ");
+                options.AppendExistenceClause(sb);
                 sb.Append('$').Append(param).Append(" VALUE [");
                 var first = true;
                 foreach (var v in DecodeValues(valuesEncoded))
@@ -306,7 +363,7 @@ namespace SurrealForge.Schema.Generator
             // versions tolerated FLEXIBLE-before-TYPE; current parsers do not).
             bool flexible = HasDirective(attr.Annotations, "flexible");
             sb.Append("DEFINE FIELD ");
-            if (options.Idempotent) sb.Append("IF NOT EXISTS ");
+            options.AppendExistenceClause(sb);
             sb.Append(attr.Name)
               .Append(" ON TABLE ").Append(table);
             sb.Append(" TYPE ").Append(attr.Type);
@@ -413,7 +470,7 @@ namespace SurrealForge.Schema.Generator
             //     FIELDS <f1>, <f2>
             //     [UNIQUE];
             sb.Append("DEFINE INDEX ");
-            if (options.Idempotent) sb.Append("IF NOT EXISTS ");
+            options.AppendExistenceClause(sb);
             sb.Append(idx.Name).Append('\n');
             sb.Append("    ON TABLE ").Append(table).Append('\n');
             sb.Append("    FIELDS ").Append(string.Join(", ", idx.Fields));
