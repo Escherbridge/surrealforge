@@ -1,9 +1,9 @@
 <Project>
 
-  <!-- Single source of truth for version + shared package metadata across all
-       SurrealForge packages. Per-project csproj override anything set here. -->
+  <!-- Single source of truth for the coordinated publish set. Package projects
+       must release together when one directly references another package. -->
   <PropertyGroup>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <Authors>SurrealForge Contributors</Authors>
     <Company>SurrealForge</Company>
     <Product>SurrealForge</Product>
