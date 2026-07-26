@@ -269,8 +269,11 @@ namespace SurrealForge.Schema.Migration
                 if (!IndexEquivalent(di!, ai!))
                 {
                     // A redefinition rebuilds the index; not data-destructive.
+                    var vectorNote = (di!.VectorKind != null || ai!.VectorKind != null)
+                        ? $", vector {DescribeVector(ai!)} → {DescribeVector(di)}"
+                        : string.Empty;
                     sink.Add(new IndexChange(table, name, IndexChangeKind.Changed, di, ai,
-                        $"redefine index {name} (fields [{string.Join(",", ai!.Fields)}] → [{string.Join(",", di!.Fields)}], unique {ai.IsUnique} → {di.IsUnique})",
+                        $"redefine index {name} (fields [{string.Join(",", ai!.Fields)}] → [{string.Join(",", di.Fields)}], unique {ai.IsUnique} → {di.IsUnique}{vectorNote})",
                         isDestructive: false));
                 }
             }
@@ -368,16 +371,51 @@ namespace SurrealForge.Schema.Migration
             return t;
         }
 
-        private static bool IndexEquivalent(SchemaIndex a, SchemaIndex b)
+        /// <summary>
+        /// Index equality for reconcile. Vector tuning params the POCO left
+        /// unset (VectorType/Efc/M/Capacity = null) match ANY live value so
+        /// server-side defaults never report as drift; structural params
+        /// (kind, dimension, distance) compare strictly. See AGENTS.md
+        /// §Vector indexes.
+        /// </summary>
+        private static bool IndexEquivalent(SchemaIndex desired, SchemaIndex actual)
         {
-            if (a.IsUnique != b.IsUnique) return false;
-            if (a.Fields.Count != b.Fields.Count) return false;
-            for (int i = 0; i < a.Fields.Count; i++)
+            if (desired.IsUnique != actual.IsUnique) return false;
+            if (desired.Fields.Count != actual.Fields.Count) return false;
+            for (int i = 0; i < desired.Fields.Count; i++)
             {
-                if (!string.Equals(a.Fields[i].Trim(), b.Fields[i].Trim(), StringComparison.Ordinal))
+                if (!string.Equals(desired.Fields[i].Trim(), actual.Fields[i].Trim(), StringComparison.Ordinal))
                     return false;
             }
+            if (desired.VectorKind != actual.VectorKind) return false;
+            if (desired.VectorKind == null) return true;
+
+            if (desired.Dimension != actual.Dimension) return false;
+            if (!string.Equals(desired.Distance ?? string.Empty, actual.Distance ?? string.Empty,
+                    StringComparison.OrdinalIgnoreCase)) return false;
+
+            if (desired.VectorType != null
+                && !string.Equals(desired.VectorType, actual.VectorType, StringComparison.OrdinalIgnoreCase))
+                return false;
+            if (desired.Efc != null && desired.Efc != actual.Efc) return false;
+            if (desired.M != null && desired.M != actual.M) return false;
+            if (desired.Capacity != null && desired.Capacity != actual.Capacity) return false;
             return true;
+        }
+
+        /// <summary>Human-readable vector clause summary for change details.</summary>
+        private static string DescribeVector(SchemaIndex idx)
+        {
+            if (idx.VectorKind == null) return "plain";
+            var kind = idx.VectorKind == VectorIndexKind.Hnsw ? "hnsw" : "mtree";
+            var parts = new List<string>();
+            if (idx.Dimension != null) parts.Add("dim=" + idx.Dimension.Value);
+            if (idx.Distance != null) parts.Add("dist=" + idx.Distance);
+            if (idx.VectorType != null) parts.Add("type=" + idx.VectorType);
+            if (idx.Efc != null) parts.Add("efc=" + idx.Efc.Value);
+            if (idx.M != null) parts.Add("m=" + idx.M.Value);
+            if (idx.Capacity != null) parts.Add("capacity=" + idx.Capacity.Value);
+            return kind + "(" + string.Join(",", parts) + ")";
         }
 
         // ── indexing helpers ───────────────────────────────────────────────

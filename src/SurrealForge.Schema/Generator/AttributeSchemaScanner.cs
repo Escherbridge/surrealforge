@@ -249,6 +249,7 @@ namespace SurrealForge.Schema.Generator
             var fieldOrder = new List<(int order, SchemaAttribute attr, IList<SchemaIndex> propIndexes)>();
 
             var classLevelIndexes = new List<SchemaIndex>();
+            var columnProps = new Dictionary<string, PropertyInfo>(StringComparer.Ordinal);
 
             // When the table is a RELATE edge, SurrealDB synthesises the
             // `in` and `out` record fields from the `TYPE RELATION FROM/TO`
@@ -265,6 +266,7 @@ namespace SurrealForge.Schema.Generator
                 {
                     continue;
                 }
+                columnProps[colName] = entry.Prop;
                 var ord = entry.Column?.Order ?? 0;
                 var propIndexes = new List<SchemaIndex>();
                 fieldOrder.Add((ord, BuildAttribute(entry.Prop, entry.Column, table.Name), propIndexes));
@@ -297,21 +299,29 @@ namespace SurrealForge.Schema.Generator
                         : new[] { colName };
                     classLevelIndexes.Add(new SchemaIndex(idx.Name, fields, idx.Unique, sourceLine: 0));
                 }
-                // HNSW property-level index.
-                var hnsw = entry.Prop.GetCustomAttribute<HnswIndexAttribute>(inherit: false);
-                if (hnsw != null)
+                // Property-level vector indexes; params carried in full — see
+                // Migration/AGENTS.md §Vector indexes for the diff semantics.
+                foreach (var hnsw in entry.Prop.GetCustomAttributes<HnswIndexAttribute>(inherit: false))
                 {
-                    classLevelIndexes.Add(new SchemaIndex(
-                        hnsw.Name,
-                        new[] { colName },
-                        isUnique: false,
-                        sourceLine: 0));
+                    ValidateVectorProperty(pocoType, entry.Prop, hnsw.Name);
+                    classLevelIndexes.Add(BuildVectorIndex(
+                        pocoType, hnsw.Name, new[] { colName }, VectorIndexKind.Hnsw,
+                        hnsw.Dimension, hnsw.Distance, hnsw.Type, efc: hnsw.Efc, m: hnsw.M, capacity: 0));
+                }
+                foreach (var mtree in entry.Prop.GetCustomAttributes<MTreeIndexAttribute>(inherit: false))
+                {
+                    ValidateVectorProperty(pocoType, entry.Prop, mtree.Name);
+                    classLevelIndexes.Add(BuildVectorIndex(
+                        pocoType, mtree.Name, new[] { colName }, VectorIndexKind.Mtree,
+                        mtree.Dimension, mtree.Distance, mtree.Type, efc: 0, m: 0, capacity: mtree.Capacity));
                 }
             }
 
             // Virtual fields declared at the class level (no CLR backing).
+            var extraFieldNames = new HashSet<string>(StringComparer.Ordinal);
             foreach (var extra in pocoType.GetCustomAttributes<ExtraSurrealFieldAttribute>(inherit: false))
             {
+                extraFieldNames.Add(extra.Name);
                 fieldOrder.Add((extra.Order, BuildExtraField(extra), new List<SchemaIndex>()));
             }
 
@@ -324,6 +334,23 @@ namespace SurrealForge.Schema.Generator
                         $"Class-level [Index(\"{idx.Name}\")] on '{pocoType.FullName}' must specify Fields=...");
                 }
                 classLevelIndexes.Add(new SchemaIndex(idx.Name, idx.Fields!, idx.Unique, sourceLine: 0));
+            }
+
+            // Class-level vector indexes — target CLR-backed columns or
+            // [ExtraSurrealField] embedding columns by name.
+            foreach (var hnsw in pocoType.GetCustomAttributes<HnswIndexAttribute>(inherit: false))
+            {
+                var vf = RequireVectorFields(pocoType, hnsw.Name, hnsw.Fields, columnProps, extraFieldNames);
+                classLevelIndexes.Add(BuildVectorIndex(
+                    pocoType, hnsw.Name, vf, VectorIndexKind.Hnsw,
+                    hnsw.Dimension, hnsw.Distance, hnsw.Type, efc: hnsw.Efc, m: hnsw.M, capacity: 0));
+            }
+            foreach (var mtree in pocoType.GetCustomAttributes<MTreeIndexAttribute>(inherit: false))
+            {
+                var vf = RequireVectorFields(pocoType, mtree.Name, mtree.Fields, columnProps, extraFieldNames);
+                classLevelIndexes.Add(BuildVectorIndex(
+                    pocoType, mtree.Name, vf, VectorIndexKind.Mtree,
+                    mtree.Dimension, mtree.Distance, mtree.Type, efc: 0, m: 0, capacity: mtree.Capacity));
             }
 
             // Sort the merged field list by Order, falling back to insertion order.
@@ -499,6 +526,107 @@ namespace SurrealForge.Schema.Generator
         /// </summary>
         private static string EncodeEnumValue(string v)
             => v.Replace("\\", "\\\\").Replace(",", "\\,").Replace("=", "\\=");
+
+        // ── vector index construction (see Migration/AGENTS.md §Vector indexes) ──
+
+        private static readonly string[] VectorDistances =
+            { "COSINE", "EUCLIDEAN", "MANHATTAN", "CHEBYSHEV", "HAMMING", "JACCARD", "MINKOWSKI", "PEARSON" };
+
+        private static readonly string[] VectorTypes = { "F64", "F32", "I64", "I32", "I16" };
+
+        /// <summary>Validate + normalize vector attribute params into a <see cref="SchemaIndex"/>.</summary>
+        private static SchemaIndex BuildVectorIndex(
+            Type pocoType, string name, IReadOnlyList<string> fields, VectorIndexKind kind,
+            int dimension, string? distance, string? type, int efc, int m, int capacity)
+        {
+            if (dimension <= 0)
+                throw new InvalidOperationException(
+                    $"Vector index '{name}' on '{pocoType.FullName}' must declare a positive Dimension " +
+                    "(SurrealDB requires it at DEFINE INDEX time).");
+
+            var dist = (distance ?? string.Empty).Trim().ToUpperInvariant();
+            if (dist.Length == 0 || Array.IndexOf(VectorDistances, dist) < 0)
+                throw new InvalidOperationException(
+                    $"Vector index '{name}' on '{pocoType.FullName}' has unknown Distance '{distance}'. " +
+                    "Expected one of: " + string.Join(", ", VectorDistances) + ".");
+
+            string? vtype = null;
+            if (!string.IsNullOrWhiteSpace(type))
+            {
+                vtype = type!.Trim().ToUpperInvariant();
+                if (Array.IndexOf(VectorTypes, vtype) < 0)
+                    throw new InvalidOperationException(
+                        $"Vector index '{name}' on '{pocoType.FullName}' has unknown Type '{type}'. " +
+                        "Expected one of: " + string.Join(", ", VectorTypes) + ".");
+            }
+
+            if (efc < 0 || m < 0 || capacity < 0)
+                throw new InvalidOperationException(
+                    $"Vector index '{name}' on '{pocoType.FullName}': Efc/M/Capacity must not be negative (0 = server default).");
+
+            return new SchemaIndex(
+                name, fields, isUnique: false, sourceLine: 0,
+                vectorKind: kind,
+                dimension: dimension,
+                distance: dist,
+                vectorType: vtype,
+                efc: kind == VectorIndexKind.Hnsw && efc > 0 ? efc : (int?)null,
+                m: kind == VectorIndexKind.Hnsw && m > 0 ? m : (int?)null,
+                capacity: kind == VectorIndexKind.Mtree && capacity > 0 ? capacity : (int?)null);
+        }
+
+        /// <summary>Fail loudly when a vector-indexed CLR property is not a numeric vector.</summary>
+        private static void ValidateVectorProperty(Type pocoType, PropertyInfo prop, string indexName)
+        {
+            if (IsVectorClrType(prop.PropertyType)) return;
+            throw new InvalidOperationException(
+                $"Vector index '{indexName}' targets '{pocoType.FullName}.{prop.Name}' of type " +
+                $"'{prop.PropertyType}', which is not a numeric vector. Use float[]/double[] " +
+                "(or List<float> etc.), or declare the column via [ExtraSurrealField] and a class-level index.");
+        }
+
+        private static bool IsVectorClrType(Type t)
+        {
+            var u = Nullable.GetUnderlyingType(t) ?? t;
+            if (u.IsArray && u.GetArrayRank() == 1)
+                return IsNumericVectorElement(u.GetElementType()!);
+            if (u.IsGenericType)
+            {
+                var def = u.GetGenericTypeDefinition();
+                if (def == typeof(List<>) || def == typeof(IList<>) || def == typeof(IReadOnlyList<>)
+                    || def == typeof(ICollection<>) || def == typeof(IReadOnlyCollection<>) || def == typeof(IEnumerable<>))
+                    return IsNumericVectorElement(u.GetGenericArguments()[0]);
+            }
+            return false;
+        }
+
+        private static bool IsNumericVectorElement(Type e)
+            => e == typeof(float) || e == typeof(double) || e == typeof(decimal)
+            || e == typeof(short) || e == typeof(int) || e == typeof(long);
+
+        /// <summary>Resolve + validate a class-level vector index field list.</summary>
+        private static IReadOnlyList<string> RequireVectorFields(
+            Type pocoType, string indexName, string[]? fields,
+            Dictionary<string, PropertyInfo> columnProps, HashSet<string> extraFieldNames)
+        {
+            if (fields == null || fields.Length == 0)
+                throw new InvalidOperationException(
+                    $"Class-level vector index '{indexName}' on '{pocoType.FullName}' must specify Fields=...");
+            foreach (var f in fields)
+            {
+                if (columnProps.TryGetValue(f, out var prop))
+                {
+                    ValidateVectorProperty(pocoType, prop, indexName);
+                }
+                else if (!extraFieldNames.Contains(f))
+                {
+                    throw new InvalidOperationException(
+                        $"Class-level vector index '{indexName}' on '{pocoType.FullName}' references unknown column '{f}'. " +
+                        "It must match a mapped property's column name or an [ExtraSurrealField] name.");
+                }
+            }
+            return fields;
+        }
 
         private static SchemaAttribute BuildExtraField(ExtraSurrealFieldAttribute extra)
         {

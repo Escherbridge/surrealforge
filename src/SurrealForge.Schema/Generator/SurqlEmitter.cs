@@ -468,12 +468,25 @@ namespace SurrealForge.Schema.Generator
             // DEFINE INDEX [IF NOT EXISTS] <name>
             //     ON TABLE <table>
             //     FIELDS <f1>, <f2>
+            //     [HNSW DIMENSION n DIST d [TYPE t] [EFC n] [M n]]
+            //     [MTREE DIMENSION n DIST d [TYPE t] [CAPACITY n]]
             //     [UNIQUE];
             sb.Append("DEFINE INDEX ");
             options.AppendExistenceClause(sb);
             sb.Append(idx.Name).Append('\n');
             sb.Append("    ON TABLE ").Append(table).Append('\n');
             sb.Append("    FIELDS ").Append(string.Join(", ", idx.Fields));
+            if (idx.VectorKind != null)
+            {
+                sb.Append('\n').Append("    ")
+                  .Append(idx.VectorKind == VectorIndexKind.Hnsw ? "HNSW" : "MTREE");
+                if (idx.Dimension != null) sb.Append(" DIMENSION ").Append(idx.Dimension.Value);
+                if (idx.Distance != null) sb.Append(" DIST ").Append(idx.Distance);
+                if (idx.VectorType != null) sb.Append(" TYPE ").Append(idx.VectorType);
+                if (idx.Efc != null) sb.Append(" EFC ").Append(idx.Efc.Value);
+                if (idx.M != null) sb.Append(" M ").Append(idx.M.Value);
+                if (idx.Capacity != null) sb.Append(" CAPACITY ").Append(idx.Capacity.Value);
+            }
             if (idx.IsUnique) sb.Append('\n').Append("    UNIQUE");
             sb.Append(";\n");
         }

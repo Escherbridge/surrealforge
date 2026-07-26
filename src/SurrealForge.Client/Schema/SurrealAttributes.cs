@@ -389,24 +389,73 @@ namespace SurrealForge.Client.Schema
     /// <summary>
     /// Emits the column as an HNSW vector index target. Pairs with a
     /// <see cref="ColumnAttribute"/> whose <see cref="ColumnAttribute.Type"/>
-    /// is <c>"array&lt;float&gt;"</c> or similar.
+    /// is <c>"array&lt;float&gt;"</c> or similar. Class-side, names the
+    /// target column(s) via <see cref="Fields"/> (e.g. an
+    /// <see cref="ExtraSurrealFieldAttribute"/> embedding column with no CLR
+    /// backing). See ANNOTATIONS.md §Vector indexes.
     /// </summary>
-    [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
+    [AttributeUsage(AttributeTargets.Property | AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class HnswIndexAttribute : Attribute
     {
-        /// <summary>Index name (e.g. <c>hnsw_quest_embedding</c>).</summary>
+        /// <summary>Index name (e.g. <c>hnsw_document_embedding</c>).</summary>
         public string Name { get; }
 
         /// <summary>Vector dimension. SurrealDB requires this at index-define time.</summary>
         public int Dimension { get; set; }
 
-        /// <summary>Distance metric ("COSINE" / "EUCLIDEAN" / "MANHATTAN").</summary>
+        /// <summary>Distance metric ("COSINE" / "EUCLIDEAN" / "MANHATTAN" / …).</summary>
         public string Distance { get; set; } = "COSINE";
+
+        /// <summary>Vector element type ("F64" / "F32" / "I64" / "I32" / "I16"). Empty = server default.</summary>
+        public string? Type { get; set; }
+
+        /// <summary>HNSW construction beam width (EFC). 0 = server default.</summary>
+        public int Efc { get; set; }
+
+        /// <summary>HNSW max connections per layer (M). 0 = server default.</summary>
+        public int M { get; set; }
+
+        /// <summary>Class-side only: SurrealDB column(s) to index.</summary>
+        public string[]? Fields { get; set; }
 
         public HnswIndexAttribute(string name)
         {
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("HNSW index name must not be empty.", nameof(name));
+            Name = name;
+        }
+    }
+
+    /// <summary>
+    /// Emits the column as an MTREE vector index target — the exact-KNN
+    /// sibling of <see cref="HnswIndexAttribute"/>; same property/class
+    /// placement rules. See ANNOTATIONS.md §Vector indexes.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Property | AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+    public sealed class MTreeIndexAttribute : Attribute
+    {
+        /// <summary>Index name (e.g. <c>mtree_document_embedding</c>).</summary>
+        public string Name { get; }
+
+        /// <summary>Vector dimension. SurrealDB requires this at index-define time.</summary>
+        public int Dimension { get; set; }
+
+        /// <summary>Distance metric ("COSINE" / "EUCLIDEAN" / "MANHATTAN" / …).</summary>
+        public string Distance { get; set; } = "COSINE";
+
+        /// <summary>Vector element type ("F64" / "F32" / "I64" / "I32" / "I16"). Empty = server default.</summary>
+        public string? Type { get; set; }
+
+        /// <summary>MTREE node capacity. 0 = server default.</summary>
+        public int Capacity { get; set; }
+
+        /// <summary>Class-side only: SurrealDB column(s) to index.</summary>
+        public string[]? Fields { get; set; }
+
+        public MTreeIndexAttribute(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                throw new ArgumentException("MTREE index name must not be empty.", nameof(name));
             Name = name;
         }
     }

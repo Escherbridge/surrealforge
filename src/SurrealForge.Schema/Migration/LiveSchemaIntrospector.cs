@@ -216,12 +216,12 @@ namespace SurrealForge.Schema.Migration
 
         /// <summary>
         /// Parse a <c>DEFINE INDEX &lt;name&gt; ON &lt;table&gt; FIELDS f1, f2
-        /// [UNIQUE]</c> string into a <see cref="SchemaIndex"/>.
+        /// [UNIQUE|HNSW …|MTREE …]</c> string into a <see cref="SchemaIndex"/>.
         /// </summary>
         internal static SchemaIndex? ParseIndexDefinition(string name, string? ddl)
         {
             if (string.IsNullOrWhiteSpace(ddl)) return null;
-            // FIELDS clause value runs up to UNIQUE/SEARCH/COMMENT/end.
+            // FIELDS clause value runs up to UNIQUE/SEARCH/MTREE/HNSW/COMMENT/end.
             var fieldsRaw = ExtractClauseValue(ddl!, "FIELDS") ?? ExtractClauseValue(ddl!, "COLUMNS");
             var fields = new List<string>();
             if (!string.IsNullOrEmpty(fieldsRaw))
@@ -233,8 +233,63 @@ namespace SurrealForge.Schema.Migration
                 }
             }
             bool unique = HasBareKeyword(ddl!, "UNIQUE");
-            return new SchemaIndex(name, fields, unique, 0);
+            var v = ParseVectorIndexClauses(ddl!);
+            return new SchemaIndex(name, fields, unique, 0,
+                v.Kind, v.Dimension, v.Distance, v.VectorType, v.Efc, v.M, v.Capacity);
         }
+
+        /// <summary>
+        /// Token-walk the tail of an index DDL after an <c>HNSW</c>/<c>MTREE</c>
+        /// keyword. Live INFO output appends derived/tuning tokens the model does
+        /// not carry (M0, LM, DOC_IDS_ORDER, DOC_IDS_CACHE, MTREE_CACHE,
+        /// EXTEND_CANDIDATES, …) — unknown tokens fall through untouched so they
+        /// never poison the parse. See AGENTS.md §Vector indexes.
+        /// </summary>
+        internal static (VectorIndexKind? Kind, int? Dimension, string? Distance,
+            string? VectorType, int? Efc, int? M, int? Capacity) ParseVectorIndexClauses(string ddl)
+        {
+            var tokens = ddl.Split(
+                new[] { ' ', '\t', '\r', '\n', ',', ';' },
+                StringSplitOptions.RemoveEmptyEntries);
+
+            VectorIndexKind? kind = null;
+            int start = -1;
+            for (int i = 0; i < tokens.Length; i++)
+            {
+                if (tokens[i].Equals("HNSW", StringComparison.OrdinalIgnoreCase))
+                { kind = VectorIndexKind.Hnsw; start = i + 1; break; }
+                if (tokens[i].Equals("MTREE", StringComparison.OrdinalIgnoreCase))
+                { kind = VectorIndexKind.Mtree; start = i + 1; break; }
+            }
+            if (kind == null) return (null, null, null, null, null, null, null);
+
+            int? dim = null, efc = null, m = null, cap = null;
+            string? dist = null, vtype = null;
+            for (int i = start; i < tokens.Length; i++)
+            {
+                var t = tokens[i];
+                string? next = i + 1 < tokens.Length ? tokens[i + 1] : null;
+                if (t.Equals("DIMENSION", StringComparison.OrdinalIgnoreCase))
+                { dim = ParseIntToken(next); i++; }
+                else if (t.Equals("DIST", StringComparison.OrdinalIgnoreCase))
+                { dist = next?.ToUpperInvariant(); i++; }
+                else if (t.Equals("TYPE", StringComparison.OrdinalIgnoreCase))
+                { vtype = next?.ToUpperInvariant(); i++; }
+                else if (t.Equals("EFC", StringComparison.OrdinalIgnoreCase))
+                { efc = ParseIntToken(next); i++; }
+                else if (t.Equals("M", StringComparison.OrdinalIgnoreCase))
+                { m = ParseIntToken(next); i++; }
+                else if (t.Equals("CAPACITY", StringComparison.OrdinalIgnoreCase))
+                { cap = ParseIntToken(next); i++; }
+            }
+            return (kind, dim, dist, vtype, efc, m, cap);
+        }
+
+        private static int? ParseIntToken(string? token)
+            => token != null
+               && int.TryParse(token, System.Globalization.NumberStyles.Integer,
+                   System.Globalization.CultureInfo.InvariantCulture, out var v)
+                ? v : (int?)null;
 
         // ── DDL token extraction ───────────────────────────────────────────
 

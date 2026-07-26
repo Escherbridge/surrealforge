@@ -98,3 +98,29 @@ a general tool must still report the incompatible case legibly.
   index ops → destructive removals last.
 - `schema_migration` (the tracking table) is excluded from introspection so it
   never shows up as drift.
+
+## Vector indexes
+
+`SchemaIndex` carries HNSW/MTREE clauses as nullable members
+(`VectorKind`, `Dimension`, `Distance`, `VectorType`, `Efc`, `M`,
+`Capacity`); null everywhere = plain index, keeping the legacy emit
+byte-identical. History: the scanner used to *drop* `[HnswIndex]`
+params, silently emitting a plain `DEFINE INDEX` with no KNN
+acceleration — the model literally could not represent them.
+
+Diff semantics (`SchemaDiff.IndexEquivalent`) are asymmetric on purpose:
+
+- **Structural** params — kind, `DIMENSION`, `DIST` — compare strictly.
+  A mismatch (including plain↔vector) is a redefine.
+- **Tuning** params — `TYPE`, `EFC`, `M`, `CAPACITY` — use
+  *desired-null-as-wildcard*: when the POCO leaves them unset, the emit
+  omits the clause, the server applies its default (e.g. `EFC 150`,
+  `M 12`, `TYPE F64`), and `INFO` reads that default back. Comparing
+  strictly would report permanent phantom drift; a wildcard converges.
+
+Parse side (`ParseVectorIndexClauses`) token-walks the DDL tail after
+the `HNSW`/`MTREE` keyword rather than using the `ClauseKeywords`
+machinery: live `INFO` output appends derived tokens the model does not
+carry (`M0`, `LM`, `DOC_IDS_ORDER`, `DOC_IDS_CACHE`, `MTREE_CACHE`) and
+unknown tokens must fall through harmlessly. Single-letter `M` is only
+matched as an exact token there, so it cannot collide with `M0`/`LM`.

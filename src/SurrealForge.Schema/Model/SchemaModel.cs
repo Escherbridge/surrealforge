@@ -149,7 +149,17 @@ namespace SurrealForge.Schema.Model
         }
     }
 
-    /// <summary>One <c>DEFINE INDEX</c> emit unit.</summary>
+    /// <summary>Vector index algorithm of a <see cref="SchemaIndex"/>.</summary>
+    public enum VectorIndexKind
+    {
+        Hnsw,
+        Mtree,
+    }
+
+    /// <summary>
+    /// One <c>DEFINE INDEX</c> emit unit. Vector members are null for plain
+    /// indexes so the non-vector emit stays byte-identical to the legacy shape.
+    /// </summary>
     public sealed class SchemaIndex
     {
         public string Name { get; }
@@ -157,12 +167,51 @@ namespace SurrealForge.Schema.Model
         public bool IsUnique { get; }
         public int SourceLine { get; }
 
-        public SchemaIndex(string name, IReadOnlyList<string> fields, bool isUnique, int sourceLine)
+        /// <summary>Non-null marks this as a vector (HNSW/MTREE) index.</summary>
+        public VectorIndexKind? VectorKind { get; }
+
+        /// <summary>Vector dimension (<c>DIMENSION</c> clause).</summary>
+        public int? Dimension { get; }
+
+        /// <summary>Distance metric, uppercase (<c>DIST</c> clause).</summary>
+        public string? Distance { get; }
+
+        /// <summary>Element type, uppercase (<c>TYPE</c> clause: F64/F32/I64/I32/I16).</summary>
+        public string? VectorType { get; }
+
+        /// <summary>HNSW construction beam width (<c>EFC</c> clause).</summary>
+        public int? Efc { get; }
+
+        /// <summary>HNSW max connections per layer (<c>M</c> clause).</summary>
+        public int? M { get; }
+
+        /// <summary>MTREE node capacity (<c>CAPACITY</c> clause).</summary>
+        public int? Capacity { get; }
+
+        public SchemaIndex(
+            string name,
+            IReadOnlyList<string> fields,
+            bool isUnique,
+            int sourceLine,
+            VectorIndexKind? vectorKind = null,
+            int? dimension = null,
+            string? distance = null,
+            string? vectorType = null,
+            int? efc = null,
+            int? m = null,
+            int? capacity = null)
         {
             Name = name;
             Fields = fields;
             IsUnique = isUnique;
             SourceLine = sourceLine;
+            VectorKind = vectorKind;
+            Dimension = dimension;
+            Distance = distance;
+            VectorType = vectorType;
+            Efc = efc;
+            M = m;
+            Capacity = capacity;
         }
     }
 }

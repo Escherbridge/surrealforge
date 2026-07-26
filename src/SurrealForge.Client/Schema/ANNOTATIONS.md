@@ -95,7 +95,8 @@ DEFINE INDEX customer_profile_customer_region_handle
 | `[Default("false")]` / `[Default("\"Pending\"")]` | Emit a `DEFAULT <value>` clause. | Value is unquoted — string defaults must include their own quoting (`"\"Pending\""`). |
 | `[References(typeof(TTarget))]` | FK to another POCO's table. | Emits `record<target_table>` (or `option<record<…>>` with `Optional = true`). Also drives the slice-flowchart edge from this entity to the target with cardinality `N:1` (or `N:0..1`). Escape hatch: `EmitAsString = true` keeps the wire type as `string` for adapters not yet migrated to record-typed traversal. The netstandard2.0 attribute layer requires `[References(typeof(T))]` form (C# 11+ generic attributes are not available). |
 | `[Index("name")]` | Single-column index on this column. | Property-level shortcut; `Fields` defaults to the property's resolved column name. |
-| `[HnswIndex("hnsw_quest_embedding", Dimension = 384)]` | HNSW vector index. | Pair with a `[Column(Type = "array<float>")]` property. |
+| `[HnswIndex("hnsw_document_embedding", Dimension = 384)]` | HNSW vector index (approximate KNN). | Emits the full `HNSW DIMENSION … DIST …` clause. `Dimension` required; optional `Distance` (default `COSINE`), `Type` (`F32`/`F64`/…), `Efc`, `M`. See §Vector indexes. |
+| `[MTreeIndex("mtree_document_embedding", Dimension = 384)]` | MTREE vector index (exact KNN). | Same placement rules as `[HnswIndex]`; optional `Capacity` instead of `Efc`/`M`. See §Vector indexes. |
 | `[FieldGroup("Logical group header")]` | Cosmetic separator above this field. | Renders as `-- Logical group header` on its own line in the `.surql`. Place on the **first** field of each group only. |
 
 ## Field-group placement (subtle but important)
@@ -104,14 +105,43 @@ DEFINE INDEX customer_profile_customer_region_handle
 current field's `[FieldGroup]` value differs from the previous field's.
 That means:
 
-- Attach `[FieldGroup("Source/target token pair")]` to the **first**
-  field of the group (e.g. `TokenIn`).
-- **Do not** repeat it on the following fields (`TokenOut`,
-  `AmountIn`, …); they stay within the group implicitly until the next
+- Attach `[FieldGroup("Source/target values")]` to the **first**
+  field of the group (e.g. `SourceValue`).
+- **Do not** repeat it on the following fields (`TargetValue`,
+  `InputAmount`, …); they stay within the group implicitly until the next
   `[FieldGroup]` appears.
 
 Matches the long-standing legacy `%% @surreal.fieldgroup "…"` Mermaid
 behaviour byte-for-byte.
+
+## Vector indexes
+
+`[HnswIndex]` (approximate KNN) and `[MTreeIndex]` (exact KNN) emit real
+SurrealDB vector index DDL:
+
+```sql
+DEFINE INDEX hnsw_document_embedding
+    ON TABLE document
+    FIELDS embedding
+    HNSW DIMENSION 384 DIST COSINE TYPE F32 EFC 150 M 12;
+```
+
+Rules the scanner enforces (violations throw at scan time):
+
+- `Dimension` is **required** and must be positive — SurrealDB demands it
+  at `DEFINE INDEX` time, and there is no CLR type that can carry it.
+- Property placement requires a numeric vector CLR type (`float[]`,
+  `double[]`, `List<float>`, …). Anything else throws.
+- Class placement requires `Fields = new[] { "…" }` naming mapped
+  columns or `[ExtraSurrealField]` names — the pattern for embedding
+  columns with no POCO surface. Unknown names throw.
+- `Distance` (default `COSINE`) and `Type` are validated against the
+  SurrealDB keyword sets and upper-cased on emit.
+
+Tuning knobs left unset (`Efc`, `M`, `Capacity`, `Type`) are omitted
+from the DDL so the server picks its defaults — and the reconcile diff
+treats unset-vs-server-default as **no drift** (see
+`SurrealForge.Schema/Migration/AGENTS.md` §Vector indexes).
 
 ## Default-value quoting rules
 
