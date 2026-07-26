@@ -70,5 +70,34 @@ public sealed class SurrealConnectionOptionsDefaultsTests
         handler.Requests.Should().HaveCount(1);
         handler.Requests[0].HasAuth.Should().BeTrue(
             "explicit credentials must still produce a Basic Authorization header (regression positive).");
+        handler.Requests[0].AuthNsHeader.Should().BeNull("root authentication is the backwards-compatible default");
+        handler.Requests[0].AuthDbHeader.Should().BeNull("root authentication is the backwards-compatible default");
+    }
+
+    [Fact]
+    public async Task HttpSurrealConnection_with_database_auth_scope_sends_explicit_auth_scope_headers()
+    {
+        var handler = new FakeHttpHandler();
+        handler.EnqueueOk(OkBody);
+
+        var opts = new SurrealConnectionOptions
+        {
+            Endpoint = "http://localhost:8442",
+            Namespace = "tenant",
+            Database = "ledger",
+            User = "runtime",
+            Password = "secret",
+            AuthenticationScope = SurrealAuthenticationScope.Database,
+        };
+
+        await using var conn = new HttpSurrealConnection(handler, opts);
+        await conn.ExecuteRawAsync("SELECT 1;");
+
+        handler.Requests[0].NsHeader.Should().Be("tenant");
+        handler.Requests[0].DbHeader.Should().Be("ledger");
+        handler.Requests[0].AuthNsHeader.Should().Be("tenant",
+            "SurrealDB must know where the database system user is defined");
+        handler.Requests[0].AuthDbHeader.Should().Be("ledger",
+            "query NS/DB headers alone authenticate Basic credentials at root");
     }
 }

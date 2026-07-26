@@ -138,10 +138,9 @@ public sealed class HttpSurrealConnection : ISurrealConnection
         // (CREATE / UPDATE / DELETE / RELATE / COMMIT TRANSACTION / ...)
         // must NEVER be silently retried — the original send may have
         // succeeded on the server even when the client side observed a
-        // transport fault, and retrying would cause double-write in the
-        // bridge value path. Only the first attempt fires for those; the
-        // exception bubbles to the caller. See
-        // <c>bridge-unsafe-pre-launch</c> + <c>data-engine-decision</c>.
+        // transport fault, and retrying could duplicate a non-idempotent
+        // mutation. Only the first attempt fires; the exception bubbles so the
+        // consumer can reconcile against durable application state.
         var totalAttempts = Math.Max(1, _options.MaxRetries);
         var allowRetries  = IsIdempotentSql(sql);
         Exception? lastError = null;
@@ -305,6 +304,7 @@ public sealed class HttpSurrealConnection : ISurrealConnection
             var raw = $"{_options.User}:{_options.Password}";
             var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(raw));
             req.Headers.Authorization = new AuthenticationHeaderValue("Basic", b64);
+            AddAuthenticationScopeHeaders(req);
         }
 
         // RPC envelope: {"id":"<correlation>","method":"query","params":[sql, vars?]}
@@ -333,6 +333,27 @@ public sealed class HttpSurrealConnection : ISurrealConnection
         req.Content = new ByteArrayContent(ms.ToArray());
         req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
         return req;
+    }
+
+    private void AddAuthenticationScopeHeaders(HttpRequestMessage request)
+    {
+        // SurrealDB v2+ authenticates Basic credentials at root unless this
+        // explicit scope is supplied; query scope alone is not authentication scope.
+        switch (_options.AuthenticationScope)
+        {
+            case SurrealAuthenticationScope.Root:
+                return;
+            case SurrealAuthenticationScope.Namespace:
+                request.Headers.TryAddWithoutValidation("Surreal-Auth-NS", _options.Namespace);
+                return;
+            case SurrealAuthenticationScope.Database:
+                request.Headers.TryAddWithoutValidation("Surreal-Auth-NS", _options.Namespace);
+                request.Headers.TryAddWithoutValidation("Surreal-Auth-DB", _options.Database);
+                return;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(_options.AuthenticationScope), _options.AuthenticationScope,
+                    "Unsupported SurrealDB Basic-authentication scope.");
+        }
     }
 
     /// <summary>

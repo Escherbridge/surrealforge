@@ -2,6 +2,19 @@ using System;
 
 namespace SurrealForge.Client;
 
+/// <summary>System-user scope used for HTTP Basic authentication.</summary>
+public enum SurrealAuthenticationScope
+{
+    /// <summary>Authenticate against the server root (the legacy-compatible default).</summary>
+    Root,
+
+    /// <summary>Authenticate against the configured namespace.</summary>
+    Namespace,
+
+    /// <summary>Authenticate against the configured namespace and database.</summary>
+    Database,
+}
+
 /// <summary>
 /// Configuration for a SurrealDB connection / pool. All fields are
 /// intentionally JSON-config friendly (string / int / TimeSpan) so consumers
@@ -37,6 +50,12 @@ public sealed class SurrealConnectionOptions
 
     /// <summary>Basic-auth password. See <see cref="User"/>.</summary>
     public string Password { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Scope that owns <see cref="User"/>. Defaults to root for backwards
+    /// compatibility; database users must explicitly select <see cref="SurrealAuthenticationScope.Database"/>.
+    /// </summary>
+    public SurrealAuthenticationScope AuthenticationScope { get; set; } = SurrealAuthenticationScope.Root;
 
     /// <summary>
     /// Maximum simultaneous in-flight HTTP requests against a single
