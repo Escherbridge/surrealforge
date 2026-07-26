@@ -40,22 +40,15 @@ public sealed class SurrealQueryClauseTrackingTests
     }
 
     [Fact]
-    public void Multiple_OrderBy_calls_only_emit_one_ORDER_BY()
+    public void Multiple_OrderBy_calls_share_one_order_clause()
     {
-        // Each .OrderBy() appends its own ORDER BY token literally. The flag
-        // is set so consumers can introspect (and so the API contract is
-        // self-consistent), but the emitter intentionally does not collapse
         // multiple ORDER BY calls — the test pins the existing behaviour:
-        // chained OrderBy calls each append an "ORDER BY <field>" fragment.
-        // (Composing multiple sort keys at the same call site is the
-        // SurrealQL-idiomatic way; chaining is left as-is for predictability.)
         var q = SurrealQuery.Of("SELECT * FROM wallet")
                             .OrderBy("created_at")
                             .OrderBy("id", OrderDirection.Desc);
 
         // The SQL ends with the two appended fragments — verify both are present.
-        q.Sql.Should().Contain("ORDER BY created_at ASC");
-        q.Sql.Should().Contain("ORDER BY id DESC");
+        q.Sql.Should().Be("SELECT * FROM wallet ORDER BY created_at ASC, id DESC");
     }
 
     [Fact]

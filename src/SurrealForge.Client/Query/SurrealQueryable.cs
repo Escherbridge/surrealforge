@@ -1,10 +1,10 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Client.Query -- deferred IQueryable<T> surface over the
 // eager SurrealQuery<T> builder (surreal-linq-graph-query Phase 2).
 //
 // The eager SurrealQuery<T> (Phase 1) already translates each clause through
 // ExpressionTranslator. This layer adds LINQ deferral on top: Where / OrderBy
-// / ThenBy / OrderByDescending / Skip / Take / Select accumulate as an
+// / ThenBy / OrderByDescending / ThenByDescending / Skip / Take / Select accumulate as an
 // expression tree and NO round-trip happens until a materializer
 // (ToListAsync / FirstOrDefaultAsync / CountAsync / ...) folds the whole tree
 // into ONE SurrealQuery<T> and dispatches it via the ISurrealExecutor.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Client.Query -- Expression<Func<T, bool>> to SurrealQL
 // translation for SurrealQuery<T>. Walks the expression tree once and
 // produces a (sql-fragment, parameters-bag) pair that the SurrealQuery
@@ -24,7 +24,7 @@
 // `WalletStatus.Active` becomes the SurrealDB string `"active"` (lowercased)
 // to match the JsonNamingPolicy convention used by the source-generator
 // emitter -- byte-identical to the untyped form
-// `SurrealQuery.Of("SELECT * FROM wallet").Where("status = $status",
+// `SurrealQuery.Of("SELECT * FROM customer").Where("status = $status",
 // new { status = "active" })`.
 //
 // Anything outside this surface throws NotSupportedException with a static
@@ -41,6 +41,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using System.Text.Json.Serialization;
+using SurrealForge.Client.Schema;
 
 namespace SurrealForge.Client.Query
 {
@@ -86,7 +87,22 @@ namespace SurrealForge.Client.Query
         public static string TranslateMemberPath<T>(Expression<Func<T, object>> selector)
         {
             if (selector == null) throw new ArgumentNullException(nameof(selector));
-            var body = selector.Body;
+            return TranslateMemberPath(selector.Body);
+        }
+
+        /// <summary>
+        /// Translate a member selector while preserving its value type. This
+        /// overload lets mutation builders require the assigned value to match
+        /// the selected property at compile time.
+        /// </summary>
+        public static string TranslateMemberPath<T, TValue>(Expression<Func<T, TValue>> selector)
+        {
+            if (selector == null) throw new ArgumentNullException(nameof(selector));
+            return TranslateMemberPath(selector.Body);
+        }
+
+        private static string TranslateMemberPath(Expression body)
+        {
             // unwrap Convert -> Cast for value-typed projections that end up
             // as `Convert(x.Foo, Object)` in the expression tree.
             while (body is UnaryExpression u && u.NodeType == ExpressionType.Convert)
@@ -339,8 +355,8 @@ namespace SurrealForge.Client.Query
                         var fn = node.Method.Name switch
                         {
                             nameof(string.StartsWith) => "string::starts_with",
-                            nameof(string.EndsWith)   => "string::ends_with",
-                            _                          => "string::contains",
+                            nameof(string.EndsWith) => "string::ends_with",
+                            _ => "string::contains",
                         };
                         var column = ResolveColumnName(columnExpr);
                         var paramName = AllocateParamName(column);
@@ -605,6 +621,11 @@ namespace SurrealForge.Client.Query
             internal static string ResolveColumnName(MemberExpression me)
             {
                 var member = me.Member;
+                var column = member.GetCustomAttribute<ColumnAttribute>();
+                if (column != null && !string.IsNullOrWhiteSpace(column.Name))
+                {
+                    return column.Name!;
+                }
                 // Prefer JsonPropertyNameAttribute when present.
                 var attr = member.GetCustomAttribute<JsonPropertyNameAttribute>();
                 if (attr != null && !string.IsNullOrEmpty(attr.Name))

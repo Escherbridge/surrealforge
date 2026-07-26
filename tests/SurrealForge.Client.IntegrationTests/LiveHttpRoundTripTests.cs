@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 using System;
 using System.Linq;
 using System.Net.Http;
@@ -6,12 +8,13 @@ using FluentAssertions;
 using SurrealForge.Client;
 using SurrealForge.Client.Connection;
 using SurrealForge.Client.Query;
+using SurrealForge.Client.Schema;
 
 namespace SurrealForge.Client.IntegrationTests;
 
 /// <summary>
 /// HIGH#3 — round-trip the homebake wire shape against a live
-/// <c>surrealdb/surrealdb:v1.5.4</c> container. When the container is not
+/// SurrealDB 3.x instance. When the database is not
 /// available (sandbox without podman/docker) every test gracefully
 /// early-returns; the existing pass-off gate's section-9 contract is mirrored
 /// here so this suite stays green either way.
@@ -27,11 +30,11 @@ public class LiveHttpRoundTripTests
 
     private SurrealConnectionOptions MakeOptions(string? db = null) => new()
     {
-        Endpoint   = _fx.Endpoint,
-        Namespace  = _fx.Namespace,
-        Database   = db ?? _fx.Database,
-        User       = _fx.User,
-        Password   = _fx.Password,
+        Endpoint = _fx.Endpoint,
+        Namespace = _fx.Namespace,
+        Database = db ?? _fx.Database,
+        User = _fx.User,
+        Password = _fx.Password,
         MaxRetries = 1,
     };
 
@@ -43,6 +46,14 @@ public class LiveHttpRoundTripTests
     private bool TrySkip()
     {
         if (_fx.SurrealAvailable) return false;
+        if (string.Equals(
+            Environment.GetEnvironmentVariable("SURREALFORGE_REQUIRE_LIVE"),
+            "1",
+            StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Live SurrealDB is required for this verification run: {_fx.SkipReason}");
+        }
         // Use the console so the skip reason shows in the test output.
         Console.WriteLine($"[SKIP] LiveSurrealDb unavailable: {_fx.SkipReason}");
         return true;
@@ -165,5 +176,129 @@ public class LiveHttpRoundTripTests
         resp[0].IsOk.Should().BeTrue();
         resp.GetValues<System.Text.Json.JsonElement>(0).Should().BeEmpty(
             "dispose-without-commit must roll back the CREATE so a separate connection sees no row");
+    }
+
+    [Fact]
+    public async Task Typed_conditional_update_has_exactly_one_concurrent_winner()
+    {
+        if (TrySkip()) return;
+
+        var db = $"client_int_{Guid.NewGuid():N}"[..30];
+        _fx.EnsureDatabase(db);
+        await using (var setup = new HttpSurrealConnection(new HttpClientHandler(), MakeOptions(db)))
+        {
+            (await setup.ExecuteRawAsync(
+                "DEFINE TABLE IF NOT EXISTS claim_record SCHEMALESS; " +
+                "CREATE claim_record:one SET status = 'pending', " +
+                "claim_key = type::string('claim:one'), " +
+                "optional_note = 'clear-me', required_name = 'stable';")).EnsureAllOk();
+        }
+
+        FluentActions.Invoking(() => SurrealWriter.UpdateOnly<LiveClaimRecord>("one")
+                .Where(r => r.Status == "pending")
+                .Set<string?>(r => r.OptionalNote, null))
+            .Should().Throw<ArgumentNullException>();
+        FluentActions.Invoking(() => SurrealWriter.UpdateOnly<LiveClaimRecord>("one")
+                .Where(r => r.Status == "pending")
+                .Unset(r => r.RequiredName))
+            .Should().Throw<InvalidOperationException>();
+
+        var attempts = Enumerable.Range(0, 20).Select(async i =>
+        {
+            await using var connection = new HttpSurrealConnection(
+                new HttpClientHandler(), MakeOptions(db));
+            var executor = new DefaultSurrealExecutor(connection);
+            var mutation = SurrealWriter.UpdateOnly<LiveClaimRecord>("one")
+                .Where(r => r.Status == "pending" && r.ClaimKey == "claim:one")
+                .Set(r => r.Status, "claimed")
+                .Set(r => r.Winner, "worker-" + i)
+                .Unset(r => r.OptionalNote)
+                .Build();
+            // Optimistic-engine write conflicts are marked retryable by the
+            // server ("This transaction can be retried") — loop like a real worker.
+            for (var retry = 0; ; retry++)
+            {
+                try
+                {
+                    var response = await executor.ExecuteAsync(mutation);
+                    response.EnsureAllOk();
+                    return response[0].AffectedCount();
+                }
+                catch (SurrealStatementException ex) when (
+                    retry < 10 && ex.Message.Contains("retried", StringComparison.OrdinalIgnoreCase))
+                {
+                    await Task.Delay(25 * (retry + 1));
+                }
+            }
+        });
+
+        var affectedCounts = await Task.WhenAll(attempts);
+        affectedCounts.Count(count => count == 1).Should().Be(1);
+        affectedCounts.Count(count => count == 0).Should().Be(19);
+
+        await using var reader = new HttpSurrealConnection(new HttpClientHandler(), MakeOptions(db));
+        var saved = await new DefaultSurrealExecutor(reader).QuerySingleAsync<LiveClaimRecord>(
+            SurrealQuery<LiveClaimRecord>.Key("one"));
+        saved.Should().NotBeNull();
+        saved!.OptionalNote.Should().BeNull();
+        saved.RequiredName.Should().Be("stable");
+    }
+
+    [Fact]
+    public async Task Typed_conditional_delete_is_match_required_and_replay_safe()
+    {
+        if (TrySkip()) return;
+
+        var db = $"client_int_{Guid.NewGuid():N}"[..30];
+        _fx.EnsureDatabase(db);
+        await using var connection = new HttpSurrealConnection(
+            new HttpClientHandler(), MakeOptions(db));
+        var executor = new DefaultSurrealExecutor(connection);
+        (await connection.ExecuteRawAsync(
+            "DEFINE TABLE IF NOT EXISTS claim_record SCHEMALESS; " +
+            "CREATE claim_record:delete_me SET status = 'claimed', " +
+            "claim_key = type::string('claim:delete');")).EnsureAllOk();
+
+        var wrongPredicate = SurrealWriter.DeleteOnly<LiveClaimRecord>("delete_me")
+            .Where(r => r.Status == "pending")
+            .Build();
+        var wrongResponse = await executor.ExecuteAsync(wrongPredicate);
+        wrongResponse.EnsureAllOk();
+        wrongResponse[0].AffectedCount().Should().Be(0);
+
+        var delete = SurrealWriter.DeleteOnly<LiveClaimRecord>("delete_me")
+            .Where(r => r.Status == "claimed" && r.ClaimKey == "claim:delete")
+            .Build();
+        var first = await executor.ExecuteAsync(delete);
+        first.EnsureAllOk();
+        first[0].AffectedCount().Should().Be(1);
+
+        var replay = await executor.ExecuteAsync(delete);
+        replay.EnsureAllOk();
+        replay[0].AffectedCount().Should().Be(0);
+    }
+
+    [SurrealTable("claim_record")]
+    private sealed class LiveClaimRecord : ISurrealRecord
+    {
+        public string SchemaName => "claim_record";
+
+        [Id]
+        public string Id { get; set; } = string.Empty;
+
+        [Column(Type = "string")]
+        public string Status { get; set; } = string.Empty;
+
+        [Column(Type = "option<string>")]
+        public string? Winner { get; set; }
+
+        [Column(Type = "option<string>")]
+        public string? ClaimKey { get; set; }
+
+        [Column(Type = "option<string>")]
+        public string? OptionalNote { get; set; }
+
+        [Column(Type = "string")]
+        public string RequiredName { get; set; } = string.Empty;
     }
 }

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // Deferred IQueryable<T> surface (surreal-linq-graph-query Phase 2). Covers:
 //   * deferral — no round-trip until a materializer runs
 //   * composability — chained Where ANDs into one statement
@@ -115,6 +115,28 @@ public class SurrealQueryableTests
         sql.Should().Be(
             "SELECT * FROM wallet WHERE status = $status ORDER BY created_at DESC START 10 LIMIT 5");
         exec.Queries[0].Params.Should().ContainKey("status").WhoseValue.Should().Be("active");
+    }
+
+    [Fact]
+    public async Task Secondary_ordering_folds_to_one_composite_clause_with_both_directions()
+    {
+        var (descendingQuery, descendingExec) = NewQueryable();
+        await descendingQuery
+            .OrderByDescending(w => w.CreatedAt)
+            .ThenByDescending(w => w.Status)
+            .ToListAsync();
+
+        descendingExec.Queries[0].Sql.Should().Be(
+            "SELECT * FROM wallet ORDER BY created_at DESC, status DESC");
+
+        var (mixedQuery, mixedExec) = NewQueryable();
+        await mixedQuery
+            .OrderBy(w => w.Status)
+            .ThenByDescending(w => w.CreatedAt)
+            .ToListAsync();
+
+        mixedExec.Queries[0].Sql.Should().Be(
+            "SELECT * FROM wallet ORDER BY status ASC, created_at DESC");
     }
 
     [Fact]

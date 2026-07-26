@@ -57,7 +57,7 @@ namespace SurrealForge.Client.Query
         // scan when an opaque body is supplied via Of). The old approach used
         // \bWHERE\b regex against the entire SQL body, which produced
         // false-positives whenever the keyword appeared inside a string
-        // literal (e.g. `CREATE wallet CONTENT { note: "check WHERE field" }`).
+        // literal (e.g. `CREATE customer CONTENT { note: "check WHERE field" }`).
         private readonly bool _hasWhere;
         private readonly bool _hasOrderBy;
         private readonly bool _hasLimit;
@@ -79,12 +79,12 @@ namespace SurrealForge.Client.Query
             Sql = sql;
             Params = @params;
             IsMultiStatement = isMultiStatement;
-            _hasWhere   = hasWhere;
+            _hasWhere = hasWhere;
             _hasOrderBy = hasOrderBy;
-            _hasLimit   = hasLimit;
-            _hasStart   = hasStart;
-            _hasReturn  = hasReturn;
-            _hasFetch   = hasFetch;
+            _hasLimit = hasLimit;
+            _hasStart = hasStart;
+            _hasReturn = hasReturn;
+            _hasFetch = hasFetch;
         }
 
         // ─── Factory ─────────────────────────────────────────────────────────
@@ -94,8 +94,8 @@ namespace SurrealForge.Client.Query
         /// SurrealQL string.
         ///
         /// <code>
-        /// var q = SurrealQuery.Of("SELECT * FROM wallet WHERE owner = $owner")
-        ///                     .WithParam("owner", avatarId);
+        /// var q = SurrealQuery.Of("SELECT * FROM customer WHERE project = $project")
+        ///                     .WithParam("project", projectId);
         /// </code>
         ///
         /// Never pass an interpolated string here; that is exactly what the
@@ -245,7 +245,7 @@ namespace SurrealForge.Client.Query
                         $"Parameter key '{key}' contains an uppercase letter. SurrealDB 3.x " +
                         "case-folds $param tokens but not the vars key, so a mixed-case name " +
                         "binds to NONE and silently matches nothing. Use a lowercase " +
-                        "(snake_case) key, e.g. 'avatar_nft_id'.", nameof(key));
+                        "(snake_case) key, e.g. 'document_owner_id'.", nameof(key));
             }
         }
 
@@ -301,15 +301,17 @@ namespace SurrealForge.Client.Query
         }
 
         /// <summary>
-        /// Appends an <c>ORDER BY {field} {ASC|DESC}</c> clause.  The field
-        /// name is identifier-validated to prevent token smuggling.
+        /// Appends a primary or secondary sort key. The first call emits
+        /// <c>ORDER BY {field} {ASC|DESC}</c>; later calls append comma-separated
+        /// keys to the same clause. The field name is identifier-validated.
         /// </summary>
         public SurrealQuery OrderBy(string field, OrderDirection direction = OrderDirection.Asc)
         {
             var safeField = ValidateFieldPath(field, nameof(field));
             var dir = direction == OrderDirection.Desc ? "DESC" : "ASC";
+            var prefix = _hasOrderBy ? ", " : " ORDER BY ";
             return CloneWith(
-                Sql + " ORDER BY " + safeField + " " + dir,
+                Sql + prefix + safeField + " " + dir,
                 Params,
                 setHasOrderBy: true);
         }
@@ -348,9 +350,9 @@ namespace SurrealForge.Client.Query
             switch (clause)
             {
                 case ReturnClause.Before: token = "BEFORE"; break;
-                case ReturnClause.After:  token = "AFTER";  break;
-                case ReturnClause.Diff:   token = "DIFF";   break;
-                case ReturnClause.None:   token = "NONE";   break;
+                case ReturnClause.After: token = "AFTER"; break;
+                case ReturnClause.Diff: token = "DIFF"; break;
+                case ReturnClause.None: token = "NONE"; break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(clause), clause, "Unknown ReturnClause value.");
             }
@@ -370,9 +372,9 @@ namespace SurrealForge.Client.Query
             switch (clause.Trim().ToUpperInvariant())
             {
                 case "BEFORE": return Return(ReturnClause.Before);
-                case "AFTER":  return Return(ReturnClause.After);
-                case "DIFF":   return Return(ReturnClause.Diff);
-                case "NONE":   return Return(ReturnClause.None);
+                case "AFTER": return Return(ReturnClause.After);
+                case "DIFF": return Return(ReturnClause.Diff);
+                case "NONE": return Return(ReturnClause.None);
                 default:
                     throw new ArgumentException(
                         "RETURN clause must be one of BEFORE, AFTER, DIFF, NONE — got '" + clause + "'.",
@@ -629,12 +631,12 @@ namespace SurrealForge.Client.Query
                 sql,
                 @params,
                 IsMultiStatement,
-                hasWhere:   _hasWhere   || setHasWhere,
+                hasWhere: _hasWhere || setHasWhere,
                 hasOrderBy: _hasOrderBy || setHasOrderBy,
-                hasLimit:   _hasLimit   || setHasLimit,
-                hasStart:   _hasStart   || setHasStart,
-                hasReturn:  _hasReturn  || setHasReturn,
-                hasFetch:   _hasFetch   || setHasFetch);
+                hasLimit: _hasLimit || setHasLimit,
+                hasStart: _hasStart || setHasStart,
+                hasReturn: _hasReturn || setHasReturn,
+                hasFetch: _hasFetch || setHasFetch);
         }
 
         /// <summary>
@@ -655,12 +657,12 @@ namespace SurrealForge.Client.Query
             out bool hasFetch)
         {
             var stripped = StripStringLiterals(sql);
-            hasWhere   = ContainsKeyword(stripped, "WHERE");
+            hasWhere = ContainsKeyword(stripped, "WHERE");
             hasOrderBy = ContainsKeyword(stripped, "ORDER BY");
-            hasLimit   = ContainsKeyword(stripped, "LIMIT");
-            hasStart   = ContainsKeyword(stripped, "START");
-            hasReturn  = ContainsKeyword(stripped, "RETURN");
-            hasFetch   = ContainsKeyword(stripped, "FETCH");
+            hasLimit = ContainsKeyword(stripped, "LIMIT");
+            hasStart = ContainsKeyword(stripped, "START");
+            hasReturn = ContainsKeyword(stripped, "RETURN");
+            hasFetch = ContainsKeyword(stripped, "FETCH");
         }
 
         private static string StripStringLiterals(string sql)

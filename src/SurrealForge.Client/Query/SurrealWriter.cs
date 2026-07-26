@@ -1,9 +1,9 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Client.Query -- the package's default, coercion-safe write
 // path. Emits CREATE/UPSERT as per-field SET assignments instead of
 // `CONTENT $body`, because SurrealDB 3.x mis-coerces a parameterized
 // `table:id`-shaped STRING in a CONTENT body into a record id (breaking plain
-// `string` columns like an Algorand `ASA:123` token). A `SET col = $p` form
+// `string` columns like a catalog key `item:123`). A `SET col = $p` form
 // with string-typed values wrapped in `type::string($p)` keeps them strings;
 // a literal CONTENT does not coerce, but the parameterized one does — so the
 // SET path is the safe default for every store.
@@ -18,7 +18,10 @@
 #nullable enable
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -41,6 +44,33 @@ namespace SurrealForge.Client.Query
         /// <summary>Emit <c>UPSERT type::record($_t,$_id) SET … RETURN AFTER</c>.</summary>
         public static SurrealQuery Upsert<T>(T entity) where T : ISurrealRecord, new()
             => Build("UPSERT", entity);
+
+        /// <summary>
+        /// Begin a strongly typed conditional update addressed to one record.
+        /// At least one predicate and one assignment are required before the
+        /// builder can emit a query.
+        /// </summary>
+        public static TypedUpdateOnlyBuilder<T> UpdateOnly<T>(string id)
+            where T : ISurrealRecord, new()
+            => new TypedUpdateOnlyBuilder<T>(id);
+
+        /// <summary>Begin a conditional update using a table-pinned record id.</summary>
+        public static TypedUpdateOnlyBuilder<T> UpdateOnly<T>(RecordId<T> id)
+            where T : ISurrealRecord, new()
+            => new TypedUpdateOnlyBuilder<T>(id);
+
+        /// <summary>
+        /// Begin a strongly typed, predicate-required delete addressed to one
+        /// record. The deleted row is returned for affected-count inspection.
+        /// </summary>
+        public static TypedDeleteOnlyBuilder<T> DeleteOnly<T>(string id)
+            where T : ISurrealRecord, new()
+            => new TypedDeleteOnlyBuilder<T>(id);
+
+        /// <summary>Begin a conditional delete using a table-pinned record id.</summary>
+        public static TypedDeleteOnlyBuilder<T> DeleteOnly<T>(RecordId<T> id)
+            where T : ISurrealRecord, new()
+            => new TypedDeleteOnlyBuilder<T>(id);
 
         private static readonly Dictionary<Type, FieldPlan[]> _planCache = new();
         private static readonly object _cacheLock = new();
@@ -75,7 +105,7 @@ namespace SurrealForge.Client.Query
                 // per-property [JsonConverter] on the POCO does NOT apply here
                 // (unlike CONTENT $body where the whole object serializes). The
                 // schema INSIDE sets use the enum names verbatim, so emit those.
-                if (value is Enum e) value = e.ToString();
+                value = NormalizeBoundValue(value);
 
                 var p = "_f_" + f.Column;
                 if (!first) sb.Append(", ");
@@ -83,29 +113,7 @@ namespace SurrealForge.Client.Query
                 sb.Append(f.Column).Append(" = ");
 
                 // Build the bound value expression.
-                string valueExpr;
-                if (f.WrapString)
-                {
-                    // String-typed column: force string interpretation so a
-                    // `table:id`-shaped value (or an enum serialized to its
-                    // string name) is not coerced into a record id. type::string
-                    // on an already-string param is a no-op.
-                    valueExpr = "type::string($" + p + ")";
-                }
-                else if (f.WrapDecimal)
-                {
-                    // Decimal-typed column: the global JSON options serialize a
-                    // C# decimal as a STRING on the wire (arbitrary-precision
-                    // preservation). A bare `$p` then arrives as a string and 3.x
-                    // refuses to coerce a string into a `decimal` column, so wrap
-                    // in type::decimal() to parse it back. Symmetric with the
-                    // string-wrap rule above.
-                    valueExpr = "type::decimal($" + p + ")";
-                }
-                else
-                {
-                    valueExpr = "$" + p;
-                }
+                var valueExpr = BoundValueExpression(f, p);
 
                 if (f.IsReadOnly)
                 {
@@ -141,14 +149,110 @@ namespace SurrealForge.Client.Query
 
         // ─── field plan (cached per type) ───────────────────────────────────
 
-        private sealed class FieldPlan
+        internal sealed class FieldPlan
         {
+            public MemberInfo Member = null!;
             public string Column = "";
             public bool IsId;
             public bool WrapString;   // wrap string values in type::string()
             public bool WrapDecimal;  // wrap decimal values in type::decimal()
             public bool IsReadOnly;   // [ReadOnly] -> guard so update keeps original
+            public bool IsOptional;
+            public Type ClrType = typeof(object);
             public Func<object, object?> Getter = _ => null;
+        }
+
+        internal static FieldPlan FieldFor<T, TValue>(Expression<Func<T, TValue>> selector)
+            where T : ISurrealRecord, new()
+        {
+            var column = ExpressionTranslator.TranslateMemberPath(selector);
+            var field = PlanFor(typeof(T)).SingleOrDefault(f => f.Column == column);
+            if (field is null)
+                throw new InvalidOperationException(
+                    $"{typeof(T).Name}.{column} is not a writable modeled field.");
+            if (field.IsId)
+                throw new InvalidOperationException("A record id cannot be changed by an update assignment.");
+            if (field.IsReadOnly)
+                throw new InvalidOperationException(
+                    $"The read-only field '{column}' cannot be changed by an update assignment.");
+            return field;
+        }
+
+        internal static FieldPlan? FieldForPredicateParameter<T>(string parameterName)
+            where T : ISurrealRecord, new()
+        {
+            foreach (var field in PlanFor(typeof(T)).OrderByDescending(f => f.Column.Length))
+            {
+                if (parameterName == field.Column) return field;
+                if (!parameterName.StartsWith(field.Column + "_", StringComparison.Ordinal)) continue;
+                var suffix = parameterName.Substring(field.Column.Length + 1);
+                if (suffix.Length > 0 && suffix.All(char.IsDigit)) return field;
+            }
+            return null;
+        }
+
+        internal static FieldPlan FieldForPredicateMember<T>(MemberInfo member)
+            where T : ISurrealRecord, new()
+        {
+            var field = PlanFor(typeof(T)).SingleOrDefault(f => f.Member == member);
+            if (field is null)
+                throw new InvalidOperationException(
+                    $"{typeof(T).Name}.{member.Name} is not a persisted modeled field.");
+            return field;
+        }
+
+        internal static object? NormalizeBoundValue(object? value)
+            => value is Enum e ? e.ToString() : value;
+
+        internal static object? NormalizePredicateBoundValue(FieldPlan? field, object? value)
+        {
+            if (field is null || value is null) return value;
+            var valueType = Nullable.GetUnderlyingType(field.ClrType) ?? field.ClrType;
+            if (!valueType.IsEnum) return value;
+
+            object? NormalizeOne(object? item)
+            {
+                if (item is not string text) return NormalizeBoundValue(item);
+                try { return Enum.Parse(valueType, text, ignoreCase: true).ToString(); }
+                catch (ArgumentException) { return item; }
+            }
+
+            if (value is IEnumerable enumerable && value is not string)
+            {
+                var normalized = new List<object?>();
+                foreach (var item in enumerable) normalized.Add(NormalizeOne(item));
+                return normalized;
+            }
+            return NormalizeOne(value);
+        }
+
+        internal static string BoundValueExpression(FieldPlan field, string parameterName)
+        {
+            if (field.WrapString)
+                return "type::string($" + parameterName + ")";
+            if (field.WrapDecimal)
+                return "type::decimal($" + parameterName + ")";
+            return "$" + parameterName;
+        }
+
+        internal static string MutationIdFor<T>(string id)
+            where T : ISurrealRecord, new()
+        {
+            if (string.IsNullOrWhiteSpace(id))
+                throw new ArgumentException("Record id must not be empty.", nameof(id));
+            var colon = id.IndexOf(':');
+            if (colon < 0) return id;
+
+            var expected = RecordId<T>.SchemaNameOf<T>();
+            var supplied = id.Substring(0, colon);
+            if (!string.Equals(supplied, expected, StringComparison.Ordinal))
+                throw new ArgumentException(
+                    $"Record id table '{supplied}' does not match expected table '{expected}'.",
+                    nameof(id));
+            var bare = id.Substring(colon + 1);
+            if (string.IsNullOrWhiteSpace(bare))
+                throw new ArgumentException("Record id must not be empty.", nameof(id));
+            return bare;
         }
 
         private static FieldPlan[] PlanFor(Type t)
@@ -217,14 +321,18 @@ namespace SurrealForge.Client.Query
                 }
 
                 bool isReadOnly = p.GetCustomAttribute<ReadOnlyAttribute>(inherit: false) != null;
+                bool isOptional = IsOptionalField(p, colType);
 
                 list.Add(new FieldPlan
                 {
+                    Member = p,
                     Column = column,
                     IsId = isId,
                     WrapString = wrap,
                     WrapDecimal = wrapDecimal,
                     IsReadOnly = isReadOnly,
+                    IsOptional = isOptional,
+                    ClrType = p.PropertyType,
                     Getter = MakeGetter(p),
                 });
             }
@@ -232,6 +340,45 @@ namespace SurrealForge.Client.Query
         }
 
         private static Func<object, object?> MakeGetter(PropertyInfo p) => obj => p.GetValue(obj);
+
+        private static bool IsOptionalField(PropertyInfo property, string? columnType)
+        {
+            if (property.GetCustomAttribute<RequiredAttribute>(inherit: false) != null) return false;
+
+            var reference = property.GetCustomAttribute<ReferencesAttribute>(inherit: false);
+            if (reference != null) return reference.Optional;
+
+            if (!string.IsNullOrWhiteSpace(columnType))
+                return columnType!.TrimStart().StartsWith("option<", StringComparison.Ordinal);
+            if (property.GetCustomAttribute<OptionalAttribute>(inherit: false) != null) return true;
+            if (Nullable.GetUnderlyingType(property.PropertyType) != null) return true;
+            return IsNullableReferenceType(property);
+        }
+
+        private static bool IsNullableReferenceType(PropertyInfo property)
+        {
+            if (property.PropertyType.IsValueType) return false;
+            foreach (var attribute in property.GetCustomAttributes(inherit: false))
+            {
+                var type = attribute.GetType();
+                if (type.FullName != "System.Runtime.CompilerServices.NullableAttribute") continue;
+                if (type.GetField("NullableFlags")?.GetValue(attribute) is byte[] flags && flags.Length > 0)
+                    return flags[0] == 2;
+            }
+
+            var declaring = property.DeclaringType;
+            while (declaring != null)
+            {
+                foreach (var attribute in declaring.GetCustomAttributes(inherit: false))
+                {
+                    var type = attribute.GetType();
+                    if (type.FullName != "System.Runtime.CompilerServices.NullableContextAttribute") continue;
+                    if (type.GetField("Flag")?.GetValue(attribute) is byte flag) return flag == 2;
+                }
+                declaring = declaring.DeclaringType;
+            }
+            return false;
+        }
 
         /// <summary>
         /// True only for a SCALAR string column: <c>string</c> or

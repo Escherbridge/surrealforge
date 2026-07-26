@@ -1,9 +1,9 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealWriter — the package's coercion-safe SET-based write path. Covers:
 //   * CREATE/UPSERT emit `SET col = …` per field (not CONTENT $body)
 //   * the [Id] column addresses the record and is NOT a SET assignment
 //   * string-valued NON-record columns are wrapped in type::string()
-//     (defeats SurrealDB-3.x `table:id` record coercion — e.g. "ASA:123")
+//     (defeats SurrealDB-3.x `table:id` record coercion)
 //   * record/FK columns ([References] / Column Type record<>) are NOT wrapped
 //   * null values are OMITTED (absent => NONE; 3.x rejects explicit null)
 //   * non-string scalars bind as-is
@@ -21,7 +21,7 @@ public class SurrealWriterTests
     [Fact]
     public void Create_emits_SET_assignments_not_content()
     {
-        var q = SurrealWriter.Create(new TBridge { Id = "b1", SourceTokenId = "ASA:123" });
+        var q = SurrealWriter.Create(new TBridge { Id = "b1", SourceTokenId = "item:123" });
         q.Sql.Should().StartWith("CREATE type::record($_t, $_id) SET ");
         q.Sql.Should().EndWith(" RETURN AFTER");
         q.Sql.Should().NotContain("CONTENT");
@@ -35,17 +35,17 @@ public class SurrealWriterTests
         q.Sql.Should().NotContain("SET id = ");
         q.Sql.Should().NotContain(", id = ");
         q.Params.Should().NotContainKey("_f_id");
-        q.Params["_t"].Should().Be("bridge_tx");
+        q.Params["_t"].Should().Be("order_record");
         q.Params["_id"].Should().Be("b1");
     }
 
     [Fact]
     public void String_column_value_is_wrapped_in_type_string()
     {
-        // ASA:123 looks like a record id; type::string() keeps it a string.
-        var q = SurrealWriter.Create(new TBridge { Id = "b1", SourceTokenId = "ASA:123" });
+        // A colon-shaped catalog key looks like a record id; keep it a string.
+        var q = SurrealWriter.Create(new TBridge { Id = "b1", SourceTokenId = "item:123" });
         q.Sql.Should().Contain("source_token_id = type::string($_f_source_token_id)");
-        q.Params["_f_source_token_id"].Should().Be("ASA:123");
+        q.Params["_f_source_token_id"].Should().Be("item:123");
     }
 
     [Fact]
@@ -92,10 +92,10 @@ public class SurrealWriterTests
         [Id] public string Id { get; set; } = "";
     }
 
-    [SurrealTable("bridge_tx")]
+    [SurrealTable("order_record")]
     public sealed class TBridge : ISurrealRecord
     {
-        public string SchemaName => "bridge_tx";
+        public string SchemaName => "order_record";
 
         [Id] [Column(Order = 1, Type = "string")] public string Id { get; set; } = "";
         // Genuine string column whose value can look like a record id.

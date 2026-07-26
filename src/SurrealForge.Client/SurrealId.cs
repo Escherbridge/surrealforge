@@ -1,10 +1,9 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Client -- canonical Guid <-> record-id-hex conversions.
 //
 // Stores conventionally key SurrealDB records by a Guid rendered as 32-char
 // lowercase hex (no dashes) -- the form SurrealLink.ToLink expects as `id`.
-// Promoted from the identical private forks consumers kept re-writing per
-// store (upstreamed from AZOA.WebAPI/Helpers/SurrealId.cs, 2026-07-06).
+// Centralized here so consumers do not maintain incompatible private copies.
 
 using System;
 
@@ -22,5 +21,33 @@ namespace SurrealForge.Client
 
         /// <summary>Parse a 32-char hex record id back to a Guid.</summary>
         public static Guid FromSurrealId(string id) => Guid.ParseExact(id, "N");
+
+        /// <summary>
+        /// Normalize a bare record id or <c>table:id</c> link returned by
+        /// SurrealDB. Quoted id renderings are accepted at response boundaries.
+        /// </summary>
+        public static string BareRecordId(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException("Record id is required.", nameof(value));
+
+            var bare = SurrealLink.FromLink(value) ?? string.Empty;
+            return bare.Length >= 2
+                && ((bare[0] == '`' && bare[bare.Length - 1] == '`')
+                    || (bare[0] == '"' && bare[bare.Length - 1] == '"'))
+                ? bare.Substring(1, bare.Length - 2)
+                : bare;
+        }
+
+        /// <summary>Parse a bare or linked Surreal record id into a Guid.</summary>
+        public static Guid ParseRecordGuid(string value)
+        {
+            var bare = BareRecordId(value);
+            return Guid.TryParse(bare, out var parsed) ? parsed : FromSurrealId(bare);
+        }
+
+        /// <summary>Parse an optional bare or linked Surreal record id.</summary>
+        public static Guid? ParseOptionalRecordGuid(string? value)
+            => string.IsNullOrWhiteSpace(value) ? null : ParseRecordGuid(value);
     }
 }

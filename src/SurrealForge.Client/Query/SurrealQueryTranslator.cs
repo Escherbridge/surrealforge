@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Client.Query -- folds a deferred IQueryable expression tree
-// (Where/OrderBy/ThenBy/OrderByDescending/Skip/Take/Select chain) into ONE
+// (Where/OrderBy/ThenBy/OrderByDescending/ThenByDescending/Skip/Take/Select) into ONE
 // eager SurrealQuery<T>. The leaf of the chain is the SurrealQueryable<T>
 // source constant (SELECT * FROM <T>); each enclosing Queryable.* call appends
 // its clause to the running SurrealQuery<T>.
@@ -66,9 +66,7 @@ namespace SurrealForge.Client.Query
                 case "ThenBy":
                     return query.ThenBy(UnwrapSelector<T>(call.Arguments[1]));
                 case "ThenByDescending":
-                    // SurrealQuery<T> spells each sort key as its own ORDER BY;
-                    // descending secondary keys reuse OrderByDescending's emit.
-                    return query.OrderByDescending(UnwrapSelector<T>(call.Arguments[1]));
+                    return query.ThenByDescending(UnwrapSelector<T>(call.Arguments[1]));
 
                 case "Take":
                     return query.Limit(EvalInt(call.Arguments[1]));

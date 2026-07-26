@@ -13,14 +13,12 @@
     <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
 
-  <!-- Package metadata. IsPackable=true so `dotnet pack` produces a .nupkg
-       for internal-feed distribution; IsPublishable=false guarded against
-       accidental `dotnet nuget push` until the publish decision is made. -->
+  <!-- Package metadata for the coordinated 0.4.0 publish set. -->
   <PropertyGroup>
     <PackageId>SurrealForge.Client</PackageId>
     <Authors>SurrealForge Contributors</Authors>
     <Company>SurrealForge</Company>
-    <Description>Homebake SurrealDB client: HTTP transport, parameterized query builder, transactions, multi-statement response model, JSON converters.</Description>
+    <Description>SurrealDB client with parameterized queries, typed conditional mutations, transactions, and JSON converters.</Description>
     <RepositoryUrl>https://github.com/Escherbridge/surrealforge</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>https://github.com/Escherbridge/surrealforge</PackageProjectUrl>

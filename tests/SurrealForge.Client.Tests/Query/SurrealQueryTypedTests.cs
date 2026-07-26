@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealQuery<T> -- typed companion to the untyped builder. Tests cover:
 //   * From() emits SELECT * FROM <SchemaName>
 //   * Where(equality) emits "<col> = $<col>" + parameter binding
@@ -94,14 +94,31 @@ public class SurrealQueryTypedTests
     }
 
     [Fact]
-    public void OrderBy_chained_with_ThenBy_emits_both_clauses()
+    public void OrderBy_chained_with_ThenBy_emits_one_composite_clause()
     {
         var q = SurrealQuery<TWallet>.From()
             .OrderBy(w => w.Status)
             .ThenBy(w => w.CreatedAt);
         SurrealQuery untyped = q;
-        untyped.Sql.Should().Contain("ORDER BY status ASC");
-        untyped.Sql.Should().Contain("ORDER BY created_at ASC");
+        untyped.Sql.Should().Be(
+            "SELECT * FROM wallet ORDER BY status ASC, created_at ASC");
+    }
+
+    [Fact]
+    public void Descending_and_mixed_secondary_ordering_are_composite_and_immutable()
+    {
+        var primary = SurrealQuery<TWallet>.From()
+            .OrderByDescending(w => w.CreatedAt);
+        SurrealQuery descending = primary.ThenByDescending(w => w.Status);
+        SurrealQuery mixed = primary.ThenBy(w => w.Status);
+        SurrealQuery unchanged = primary;
+
+        unchanged.Sql.Should().Be(
+            "SELECT * FROM wallet ORDER BY created_at DESC");
+        descending.Sql.Should().Be(
+            "SELECT * FROM wallet ORDER BY created_at DESC, status DESC");
+        mixed.Sql.Should().Be(
+            "SELECT * FROM wallet ORDER BY created_at DESC, status ASC");
     }
 
     [Fact]

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Client.Query -- typed companion to the existing untyped
 // SurrealQuery. The shape mirrors the untyped builder one-to-one but every
 // fluent step takes a typed expression that ExpressionTranslator converts
@@ -85,8 +85,8 @@ namespace SurrealForge.Client.Query
         /// Emit a typed graph traversal from this query's anchored record(s).
         /// The <paramref name="path"/> lambda builds an arrow path off the
         /// modeled <c>[RelateEdge]</c> POCOs
-        /// (<c>r =&gt; r.Out&lt;ForkedFrom&gt;().To&lt;QuestRun&gt;()</c> →
-        /// <c>-&gt;forked_from-&gt;quest_run</c>); the result is a
+        /// (<c>r =&gt; r.Out&lt;ForkedFrom&gt;().To&lt;WorkflowRun&gt;()</c> →
+        /// <c>-&gt;forked_from-&gt;workflow_run</c>); the result is a
         /// <see cref="SurrealQuery{TTarget}"/> deserializing the traversed
         /// target records:
         /// <c>SELECT VALUE &lt;path&gt; FROM &lt;anchor&gt;</c>.
@@ -175,15 +175,21 @@ namespace SurrealForge.Client.Query
         }
 
         /// <summary>
-        /// Append a secondary ORDER BY clause. SurrealQL syntax appends
-        /// successive comma-separated sort keys, but the underlying
-        /// untyped builder spells each one as a separate <c>ORDER BY</c>;
-        /// SurrealDB accepts either form.
+        /// Append an ascending secondary key to the current ORDER BY clause.
         /// </summary>
         public SurrealQuery<T> ThenBy(Expression<Func<T, object>> selector)
         {
             var col = ExpressionTranslator.TranslateMemberPath(selector);
             return new SurrealQuery<T>(_inner.OrderBy(col, OrderDirection.Asc));
+        }
+
+        /// <summary>
+        /// Append a descending secondary key to the current ORDER BY clause.
+        /// </summary>
+        public SurrealQuery<T> ThenByDescending(Expression<Func<T, object>> selector)
+        {
+            var col = ExpressionTranslator.TranslateMemberPath(selector);
+            return new SurrealQuery<T>(_inner.OrderBy(col, OrderDirection.Desc));
         }
 
         /// <summary>Append a <c>LIMIT n</c> clause.</summary>

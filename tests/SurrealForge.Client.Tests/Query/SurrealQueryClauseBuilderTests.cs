@@ -42,7 +42,7 @@ public sealed class SurrealQueryClauseBuilderTests
     public void Where_does_not_mutate_receiver()
     {
         var original = SurrealQuery.Of("SELECT * FROM wallet");
-        var derived  = original.Where("id = $id", new { id = "x" });
+        var derived = original.Where("id = $id", new { id = "x" });
 
         original.Sql.Should().Be("SELECT * FROM wallet");
         original.Params.Should().BeEmpty();
@@ -72,6 +72,21 @@ public sealed class SurrealQueryClauseBuilderTests
         var q = SurrealQuery.Of("SELECT * FROM wallet").OrderBy("created_at", OrderDirection.Desc);
 
         q.Sql.Should().Be("SELECT * FROM wallet ORDER BY created_at DESC");
+    }
+
+    [Fact]
+    public void Repeated_ordering_appends_comma_separated_keys_immutably()
+    {
+        var primary = SurrealQuery.Of("SELECT * FROM wallet")
+            .OrderBy("status", OrderDirection.Asc);
+        var ascending = primary.OrderBy("created_at", OrderDirection.Asc);
+        var descending = primary.OrderBy("created_at", OrderDirection.Desc);
+
+        primary.Sql.Should().Be("SELECT * FROM wallet ORDER BY status ASC");
+        ascending.Sql.Should().Be(
+            "SELECT * FROM wallet ORDER BY status ASC, created_at ASC");
+        descending.Sql.Should().Be(
+            "SELECT * FROM wallet ORDER BY status ASC, created_at DESC");
     }
 
     [Fact]
@@ -126,9 +141,9 @@ public sealed class SurrealQueryClauseBuilderTests
 
     [Theory]
     [InlineData(ReturnClause.Before, "BEFORE")]
-    [InlineData(ReturnClause.After,  "AFTER")]
-    [InlineData(ReturnClause.Diff,   "DIFF")]
-    [InlineData(ReturnClause.None,   "NONE")]
+    [InlineData(ReturnClause.After, "AFTER")]
+    [InlineData(ReturnClause.Diff, "DIFF")]
+    [InlineData(ReturnClause.None, "NONE")]
     public void Return_emits_correct_token_for_each_enum_value(ReturnClause clause, string token)
     {
         var q = SurrealQuery.Of("UPDATE wallet SET balance = $b")
@@ -140,9 +155,9 @@ public sealed class SurrealQueryClauseBuilderTests
 
     [Theory]
     [InlineData("before", "BEFORE")]
-    [InlineData("AFTER",  "AFTER")]
-    [InlineData("diff",   "DIFF")]
-    [InlineData("None",   "NONE")]
+    [InlineData("AFTER", "AFTER")]
+    [InlineData("diff", "DIFF")]
+    [InlineData("None", "NONE")]
     public void Return_string_overload_is_case_insensitive(string input, string expectedToken)
     {
         var q = SurrealQuery.Of("UPDATE wallet SET balance = $b")

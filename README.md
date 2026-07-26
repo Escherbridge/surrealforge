@@ -82,6 +82,17 @@ var conn = new HttpSurrealConnection(new HttpClient(), options);
 await conn.UseAsync("analytics", "events");
 ```
 
+SurrealDB 2+ authenticates HTTP Basic credentials at root unless an explicit
+system-user scope is supplied. Database users must opt in with the namespace
+and database where the user is defined:
+
+```csharp
+options.AuthenticationScope = SurrealAuthenticationScope.Database;
+```
+
+This adds `Surreal-Auth-NS` and `Surreal-Auth-DB`; it is separate from the
+query scope headers and defaults to `Root` for backwards compatibility.
+
 ### 2. Raw parameterized queries
 
 `ExecuteRawAsync` returns a `SurrealResponse` — an `IReadOnlyList<SurrealStatementResult>`,
@@ -122,6 +133,37 @@ var q = SurrealQuery<Person>.From()
 
 var rows = await executor.QueryAsync<Person>(q);
 ```
+
+Typed writes cover inserts, record-shaped upserts, conditional partial updates,
+and conditional deletes. Mutation builders require a predicate; updates accept
+multiple typed assignments and use an explicit `Unset` for SurrealDB's `NONE`
+sentinel. Fluent calls are immutable, so a common predicate can safely branch
+into independent mutations:
+
+```csharp
+var insert = SurrealWriter.Create(new Person { Id = "jade", Name = "Jade" });
+var upsert = SurrealWriter.Upsert(new Person { Id = "jade", Name = "Jade A." });
+
+var update = SurrealWriter.UpdateOnly<Person>("person:jade")
+    .Where(p => p.City == "Cairo" && p.Age >= 21)
+    .Set(p => p.Name, "Jade A.")
+    .Build();
+
+var response = await executor.ExecuteAsync(update);
+if (response[0].AffectedCount() != 1)
+    throw new InvalidOperationException("The conditional update lost its race.");
+
+var delete = SurrealWriter.DeleteOnly<Person>("person:jade")
+    .Where(p => p.Name == "Archived")
+    .Build();
+```
+
+Prefer these typed primitives for single-table reads and mutations. Raw
+parameterized SurrealQL remains the standing escape hatch only for atomic
+multi-table or multi-statement transactions the typed builders cannot preserve.
+An unsupported single statement, DDL operation, or dynamic administrative query
+requires a documented owner, reason, and expiry for removal. Never interpolate
+identifiers or values.
 
 ### 4. EF-style context (`SurrealContext`)
 
