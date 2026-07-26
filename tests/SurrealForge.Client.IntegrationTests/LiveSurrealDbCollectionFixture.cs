@@ -17,14 +17,17 @@ namespace SurrealForge.Client.IntegrationTests;
 /// </summary>
 public sealed class LiveSurrealDbCollectionFixture : IDisposable
 {
-    /// <summary>SurrealDB HTTP endpoint for tests in this collection.</summary>
-    public string Endpoint { get; } = "http://127.0.0.1:8000";
+    /// <summary>SurrealDB HTTP endpoint for tests in this collection. Override via SURREALFORGE_TEST_ENDPOINT.</summary>
+    public string Endpoint { get; } =
+        Environment.GetEnvironmentVariable("SURREALFORGE_TEST_ENDPOINT") ?? "http://127.0.0.1:8000";
 
-    /// <summary>Root user for the local SurrealDB instance.</summary>
-    public string User { get; } = "root";
+    /// <summary>Root user for the local SurrealDB instance. Override via SURREALFORGE_TEST_USER.</summary>
+    public string User { get; } =
+        Environment.GetEnvironmentVariable("SURREALFORGE_TEST_USER") ?? "root";
 
-    /// <summary>Root password for the local SurrealDB instance.</summary>
-    public string Password { get; } = "root";
+    /// <summary>Root password for the local SurrealDB instance. Override via SURREALFORGE_TEST_PASS.</summary>
+    public string Password { get; } =
+        Environment.GetEnvironmentVariable("SURREALFORGE_TEST_PASS") ?? "root";
 
     /// <summary>Default namespace for the fixture's live tests.</summary>
     public string Namespace { get; } = "test";
