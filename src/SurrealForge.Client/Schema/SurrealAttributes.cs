@@ -461,6 +461,44 @@ namespace SurrealForge.Client.Schema
     }
 
     /// <summary>
+    /// Where the embedding for an <see cref="EmbeddedAttribute"/> column is
+    /// computed. See src/SurrealForge.Vector/AGENTS.md §Embedding modes.
+    /// </summary>
+    public enum EmbeddingMode
+    {
+        /// <summary>Encode inline during the insert/update (request-path CPU).</summary>
+        WriteTime,
+        /// <summary>Writes land with a null/stale vector; a dedicated backfill job fills it.</summary>
+        Batched,
+    }
+
+    /// <summary>
+    /// Declares a string source column as embedded: names the target vector
+    /// column, the encoder profile, and the embedding mode. Inert at runtime;
+    /// scanned by SurrealForge.Vector's <c>EmbeddingSchemaScanner</c> into job
+    /// definitions. See src/SurrealForge.Vector/AGENTS.md §Schema scanning.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
+    public sealed class EmbeddedAttribute : Attribute
+    {
+        /// <summary>Target vector column name (snake_case), e.g. <c>embedding</c>.</summary>
+        public string TargetColumn { get; }
+
+        /// <summary>Encoder profile name registered via <c>AddSurrealVectorSearch</c>. Null = default profile.</summary>
+        public string? Profile { get; set; }
+
+        /// <summary>When the embedding is computed. Default <see cref="EmbeddingMode.WriteTime"/>.</summary>
+        public EmbeddingMode Mode { get; set; } = EmbeddingMode.WriteTime;
+
+        public EmbeddedAttribute(string targetColumn)
+        {
+            if (string.IsNullOrWhiteSpace(targetColumn))
+                throw new ArgumentException("Target vector column must not be empty.", nameof(targetColumn));
+            TargetColumn = targetColumn;
+        }
+    }
+
+    /// <summary>
     /// Field-group separator comment. The emitter prints <c>-- &lt;Text&gt;</c>
     /// on a line of its own immediately before this column. Used to break
     /// up logical groupings within a long table. Mirrors the legacy

@@ -266,6 +266,33 @@ public sealed class SurrealQlSafetyAnalyzerTests
     }
 
     [Fact]
+    public async Task Pass_code_inside_vector_package_layer_is_exempt()
+    {
+        // The SurrealForge.Vector namespace is a sanctioned safe-construction
+        // layer (DESIGN.md Phase 1): its query builder concatenates validated
+        // identifiers and int-formatted K/EF while keeping embeddings
+        // $param-bound, so SRDB0001 must not fire inside it.
+        const string source = """
+            using SurrealForge.Client.Query;
+
+            namespace SurrealForge.Vector
+            {
+                class VectorQueryBuilder
+                {
+                    void Build(string table, string field, int k)
+                    {
+                        // Inside the allowlist namespace — not flagged
+                        var q = SurrealQuery.Of($"SELECT *, vector::distance::knn() AS dist FROM {table} WHERE {field} <|{k}|> $q ORDER BY dist");
+                    }
+                }
+            }
+            """;
+
+        // No diagnostics expected (allowlist)
+        await RunWithSurrealQueryAsync(source);
+    }
+
+    [Fact]
     public async Task Pass_legacy_Core_SurrealDb_Query_namespace_is_exempt()
     {
         // The legacy YourApp Core.SurrealDb.Query namespace must remain

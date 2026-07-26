@@ -373,6 +373,10 @@ public sealed class SurrealQlSafetyAnalyzerDiagnostic : DiagnosticAnalyzer
         // the sanctioned safe-construction layers:
         //   * Core.SurrealDb.Query                  — legacy in-repo builder layer.
         //   * SurrealForge.Client.Query          — homebake package query layer.
+        //   * SurrealForge.Vector                — vector query builder (KNN
+        //     operator + brute-force shapes concatenate validated identifiers
+        //     and int-formatted K/EF; embeddings stay $param-bound). Same
+        //     trust status as SurrealQuery per DESIGN.md Phase 1.
         //   * SurrealForge.Schema.Migration      — schema runner (HIGH#6 fallback).
         //     Architectural rationale: the schema package was deliberately
         //     shipped with a narrow local <c>ISurrealConnection</c> abstraction
@@ -398,6 +402,7 @@ public sealed class SurrealQlSafetyAnalyzerDiagnostic : DiagnosticAnalyzer
 
         return ns.IndexOf("Core.SurrealDb.Query",             System.StringComparison.Ordinal) >= 0 ||
                ns.IndexOf("SurrealForge.Client.Query",     System.StringComparison.Ordinal) >= 0 ||
+               ns.IndexOf("SurrealForge.Vector",           System.StringComparison.Ordinal) >= 0 ||
                ns.IndexOf("SurrealForge.Schema.Migration", System.StringComparison.Ordinal) >= 0;
     }
 

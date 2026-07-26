@@ -1,9 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- Multi-target so consumers on .NET Framework / netstandard tooling
-         (analyzers, build tasks, CLI utilities) can reference the same
-         package as net10.0 production consumers. -->
+    <!-- Multi-target mirrors SurrealForge.Client so the same consumer set
+         (netstandard tooling + net10.0 production apps) can reference it. -->
     <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
@@ -13,29 +12,30 @@
     <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
 
-  <!-- Package metadata for the coordinated 0.4.0 publish set. -->
+  <!-- Package metadata for the coordinated publish set. -->
   <PropertyGroup>
-    <PackageId>SurrealForge.Client</PackageId>
+    <PackageId>SurrealForge.Vector</PackageId>
     <Authors>SurrealForge Contributors</Authors>
     <Company>SurrealForge</Company>
-    <Description>SurrealDB client with parameterized queries, typed conditional mutations, transactions, and JSON converters.</Description>
+    <Description>Vector search and embedding-pipeline core for SurrealForge: indexed KNN + brute-force search, text chunking, embedding cache, and schema-declared backfill jobs. No ONNX dependency.</Description>
     <RepositoryUrl>https://github.com/Escherbridge/surrealforge</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>https://github.com/Escherbridge/surrealforge</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageTags>surrealdb;database</PackageTags>
+    <PackageTags>surrealdb;database;vector;embeddings;knn</PackageTags>
     <IsPackable>true</IsPackable>
     <IsPublishable>true</IsPublishable>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- DI abstractions for the AddSurrealForge entry point (both TFMs). -->
+    <ProjectReference Include="../SurrealForge.Client/SurrealForge.Client.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
-    <!-- System.Text.Json on netstandard2.0 is not in-box; net8.0 has it built-in. -->
-    <PackageReference Include="System.Text.Json" Version="8.0.5" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
-    <!-- IAsyncDisposable for netstandard2.0 (built-in on net8.0). -->
-    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="8.0.0" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
-    <!-- System.Threading.Channels (live-query demux) on netstandard2.0; in-box on net8.0. -->
+    <!-- IHostedService for the backfill job runner. -->
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.1" />
+    <!-- Bounded channels (backfill backpressure) on netstandard2.0; in-box on net10.0. -->
     <PackageReference Include="System.Threading.Channels" Version="8.0.0" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
   </ItemGroup>
 
