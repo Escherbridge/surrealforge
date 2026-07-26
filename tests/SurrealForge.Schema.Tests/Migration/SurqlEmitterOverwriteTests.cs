@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurqlEmitter OVERWRITE-mode tests -- the emit half of the fix. A changed
 // field must render `DEFINE FIELD OVERWRITE ... TYPE <new>` (evolves in place)
 // rather than `IF NOT EXISTS` (which never alters an existing field).

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Schema -- Deterministic .surql generator (Phase 4 task 21).
 //
 // SchemaModel  ->  SurqlEmitter.Emit  ->  string
@@ -494,7 +494,7 @@ namespace SurrealForge.Schema.Generator
         /// <summary>
         /// Returns the first positional / quoted argument of the first
         /// annotation matching <paramref name="directive"/>, or null if not present.
-        /// Bare-token directives (e.g. <c>@surreal.aggregate Wallet</c>) return the
+        /// Bare-token directives (e.g. <c>@surreal.aggregate Customer</c>) return the
         /// raw arguments string; quoted directives return the unescaped value.
         /// </summary>
         private static string? FirstArg(IReadOnlyList<SchemaAnnotation> anns, string directive)

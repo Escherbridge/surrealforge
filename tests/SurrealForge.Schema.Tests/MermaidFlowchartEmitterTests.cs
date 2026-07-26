@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Schema.Tests -- Flowchart emitter smoke tests.
 //
 // The MermaidFlowchartEmitter renders the "graph LR" portfolio shape

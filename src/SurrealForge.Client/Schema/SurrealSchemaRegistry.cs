@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Client -- centralized Type -> SurrealDB table-name lookup.
 //
 // Design intent (added 2026-06-07):

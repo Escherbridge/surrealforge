@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Schema -- parse emitted .surql schema files back into a
 // SchemaModel (the DESIRED model source for reconcile when no assembly is
 // available, e.g. inside the deploy container which ships only the generated

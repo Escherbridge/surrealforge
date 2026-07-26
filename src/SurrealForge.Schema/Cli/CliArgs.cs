@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Schema -- Hand-rolled CLI argument parser.
 //
 // Why hand-rolled rather than System.CommandLine? The latter has lived on a

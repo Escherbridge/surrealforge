@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Schema.Tests -- Migration runner integration tests (Phase 4 task 25).
 //
 // All tests use a captured-SQL `RecordingConnection` (no live container).
@@ -29,8 +29,8 @@ namespace SurrealForge.Schema.Tests.Migration
             var runner = new MigrationRunner(conn, appliedBy: "test");
             var files = new[]
             {
-                new MigrationFile("/x/010_wallet.surql", "DEFINE TABLE wallet SCHEMAFULL;"),
-                new MigrationFile("/x/020_bridge_tx.surql", "DEFINE TABLE bridge_tx SCHEMAFULL;"),
+                new MigrationFile("/x/010_customer.surql", "DEFINE TABLE customer SCHEMAFULL;"),
+                new MigrationFile("/x/020_order.surql", "DEFINE TABLE order SCHEMAFULL;"),
             };
 
             var plan = await runner.ApplyAsync(files);
@@ -45,8 +45,8 @@ namespace SurrealForge.Schema.Tests.Migration
             conn.SentSql[0].Should().Contain("checksum");
 
             // Then: each file's content was sent + a recording UPDATE.
-            conn.SentSql.Should().Contain(s => s == "DEFINE TABLE wallet SCHEMAFULL;");
-            conn.SentSql.Should().Contain(s => s == "DEFINE TABLE bridge_tx SCHEMAFULL;");
+            conn.SentSql.Should().Contain(s => s == "DEFINE TABLE customer SCHEMAFULL;");
+            conn.SentSql.Should().Contain(s => s == "DEFINE TABLE order SCHEMAFULL;");
             conn.SentSql.Where(s => s.StartsWith("UPSERT schema_migration:")).Should().HaveCount(2);
         }
 
@@ -55,25 +55,25 @@ namespace SurrealForge.Schema.Tests.Migration
         {
             var conn = new RecordingConnection();
             var runner = new MigrationRunner(conn, appliedBy: "test");
-            var files = new[] { new MigrationFile("/x/010_wallet.surql", "DEFINE TABLE wallet SCHEMAFULL;") };
+            var files = new[] { new MigrationFile("/x/010_customer.surql", "DEFINE TABLE customer SCHEMAFULL;") };
 
             await runner.ApplyAsync(files);
 
             // Capture the count of DDL writes (file content + recording UPDATE).
             int writesAfterFirstApply = conn.SentSql.Count(s =>
-                s.Contains("DEFINE TABLE wallet")
+                s.Contains("DEFINE TABLE customer")
                 || s.StartsWith("UPSERT schema_migration:"));
 
             // Simulate that the server now has the record. RecordingConnection
             // exposes its applied rows to itself via its in-memory store.
-            conn.MarkApplied("010_wallet.surql", files[0].Checksum);
+            conn.MarkApplied("010_customer.surql", files[0].Checksum);
 
-            // Second apply: no new writes for the wallet file.
+            // Second apply: no new writes for the customer file.
             conn.ClearLog();
             var plan2 = await runner.ApplyAsync(files);
 
             plan2.Single().Action.Should().Be(MigrationAction.Skip);
-            conn.SentSql.Should().NotContain(s => s.Contains("DEFINE TABLE wallet"));
+            conn.SentSql.Should().NotContain(s => s.Contains("DEFINE TABLE customer"));
             conn.SentSql.Should().NotContain(s => s.StartsWith("UPSERT schema_migration:"));
         }
 
@@ -84,21 +84,21 @@ namespace SurrealForge.Schema.Tests.Migration
             var runner = new MigrationRunner(conn);
             var files = new[]
             {
-                new MigrationFile("/x/010_wallet.surql", "DEFINE TABLE wallet SCHEMAFULL;\n-- new comment\n"),
+                new MigrationFile("/x/010_customer.surql", "DEFINE TABLE customer SCHEMAFULL;\n-- new comment\n"),
             };
 
             // Pretend a different content was previously applied.
-            conn.MarkApplied("010_wallet.surql", "00deadbeef0000000000000000000000");
+            conn.MarkApplied("010_customer.surql", "00deadbeef0000000000000000000000");
 
             var act = () => runner.ApplyAsync(files);
             var ex = await act.Should().ThrowAsync<MigrationChecksumMismatchException>();
             ex.Which.Mismatches.Should().ContainSingle(m =>
-                m.File.FileName == "010_wallet.surql"
+                m.File.FileName == "010_customer.surql"
                 && m.PriorChecksum == "00deadbeef0000000000000000000000");
 
             // Critical: no DDL was sent for the file (only the schema_migration
             // table DDL + SELECT may have been emitted before the abort).
-            conn.SentSql.Should().NotContain(s => s.Contains("DEFINE TABLE wallet"));
+            conn.SentSql.Should().NotContain(s => s.Contains("DEFINE TABLE customer"));
         }
 
         [Fact]
@@ -108,15 +108,15 @@ namespace SurrealForge.Schema.Tests.Migration
             var runner = new MigrationRunner(conn);
             var files = new[]
             {
-                new MigrationFile("/x/010_wallet.surql", "DEFINE TABLE wallet SCHEMAFULL;\n-- new content\n"),
+                new MigrationFile("/x/010_customer.surql", "DEFINE TABLE customer SCHEMAFULL;\n-- new content\n"),
             };
-            conn.MarkApplied("010_wallet.surql", "00deadbeef0000000000000000000000");
+            conn.MarkApplied("010_customer.surql", "00deadbeef0000000000000000000000");
 
             var plan = await runner.ApplyAsync(files, dryRun: false, force: true);
 
             plan.Should().ContainSingle().Which.Action.Should().Be(MigrationAction.ChecksumMismatch);
             // The DDL was sent and the row was overwritten.
-            conn.SentSql.Should().Contain(s => s.Contains("DEFINE TABLE wallet"));
+            conn.SentSql.Should().Contain(s => s.Contains("DEFINE TABLE customer"));
             conn.SentSql.Should().Contain(s => s.StartsWith("UPSERT schema_migration:")
                 && s.Contains(files[0].Checksum));
         }
@@ -128,8 +128,8 @@ namespace SurrealForge.Schema.Tests.Migration
             var runner = new MigrationRunner(conn);
             var files = new[]
             {
-                new MigrationFile("/x/010_wallet.surql", "DEFINE TABLE wallet SCHEMAFULL;"),
-                new MigrationFile("/x/020_bridge_tx.surql", "DEFINE TABLE bridge_tx SCHEMAFULL;"),
+                new MigrationFile("/x/010_customer.surql", "DEFINE TABLE customer SCHEMAFULL;"),
+                new MigrationFile("/x/020_order.surql", "DEFINE TABLE order SCHEMAFULL;"),
             };
 
             // Strip the schema_migration table DDL from the "writes" set so we
@@ -138,8 +138,8 @@ namespace SurrealForge.Schema.Tests.Migration
             // necessary for the plan-query to succeed).
             await runner.ApplyAsync(files, dryRun: true, force: false);
 
-            conn.SentSql.Should().NotContain(s => s == "DEFINE TABLE wallet SCHEMAFULL;");
-            conn.SentSql.Should().NotContain(s => s == "DEFINE TABLE bridge_tx SCHEMAFULL;");
+            conn.SentSql.Should().NotContain(s => s == "DEFINE TABLE customer SCHEMAFULL;");
+            conn.SentSql.Should().NotContain(s => s == "DEFINE TABLE order SCHEMAFULL;");
             conn.SentSql.Should().NotContain(s => s.StartsWith("UPSERT schema_migration:"));
         }
 
@@ -148,12 +148,12 @@ namespace SurrealForge.Schema.Tests.Migration
         {
             var conn = new RecordingConnection();
             var runner = new MigrationRunner(conn);
-            conn.MarkApplied("010_wallet.surql", "abc123");
-            conn.MarkApplied("020_bridge_tx.surql", "def456");
+            conn.MarkApplied("010_customer.surql", "abc123");
+            conn.MarkApplied("020_order.surql", "def456");
 
             var status = await runner.StatusAsync();
             status.Should().HaveCount(2);
-            status.Select(r => r.FileName).Should().BeEquivalentTo(new[] { "010_wallet.surql", "020_bridge_tx.surql" });
+            status.Select(r => r.FileName).Should().BeEquivalentTo(new[] { "010_customer.surql", "020_order.surql" });
         }
 
         [Fact]
@@ -215,7 +215,7 @@ namespace SurrealForge.Schema.Tests.Migration
             var conn = new RecordingConnection();
             var nasty = "ci-runner\" OR 1=1 --\\";
             var runner = new MigrationRunner(conn, appliedBy: nasty);
-            var files = new[] { new MigrationFile("/x/010_wallet.surql", "DEFINE TABLE wallet SCHEMAFULL;") };
+            var files = new[] { new MigrationFile("/x/010_customer.surql", "DEFINE TABLE customer SCHEMAFULL;") };
 
             await runner.ApplyAsync(files);
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Schema -- Mermaid flowchart emitter (C#-first pivot).
 //
 // Sibling to AggregateEmitter. Where AggregateEmitter renders the
@@ -9,12 +9,12 @@
 //
 //   graph LR
 //       %% Define Nodes
-//       wallet[wallet: Node]:::nodeClass
-//       nft_ownership[nft_ownership: Node]:::nodeClass
+//       customer[customer: Node]:::nodeClass
+//       project_membership[project_membership: Node]:::nodeClass
 //
 //       %% Define Edges
-//       wallet -- "OWNED_BY [N:1]" --> avatar
-//       avatar -- "OWNS [1:N]" --> wallet
+//       customer -- "MEMBER_OF [N:1]" --> project
+//       project -- "HAS_MEMBER [1:N]" --> customer
 //
 //       classDef nodeClass fill:#f9f9f9,stroke:#333,stroke-width:2px,rx:10px,ry:10px;
 //
@@ -453,7 +453,7 @@ namespace SurrealForge.Schema.Generator
             // Subgraph IDs must be Mermaid identifiers (no spaces / special
             // chars). They MUST also be distinct from every node identifier
             // in the graph -- when slice name == entity name (e.g. slice
-            // "quest" containing node "quest"), Mermaid silently merges them
+            // "project" containing node "project"), Mermaid silently merges them
             // and the diagram fails to render. Always prefix with "slice_"
             // to guarantee the namespace separation.
             var sb = new StringBuilder("slice_", sliceName.Length + 6);

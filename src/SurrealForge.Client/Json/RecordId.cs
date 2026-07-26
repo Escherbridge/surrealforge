@@ -4,7 +4,7 @@ namespace SurrealForge.Client.Json;
 
 /// <summary>
 /// A SurrealDB record identifier of the shape <c>&lt;table&gt;:&lt;id&gt;</c>
-/// (e.g. <c>wallet:abc123</c>). The id part is opaque — UUID, ULID, numeric,
+/// (e.g. <c>customer:abc123</c>). The id part is opaque — UUID, ULID, numeric,
 /// or any allowed SurrealQL identifier — and is preserved verbatim.
 /// See <see href="https://surrealdb.com/docs/surrealql/datamodel/ids">SurrealDB
 /// IDs</see> for the full grammar; this type intentionally does not validate

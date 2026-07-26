@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Schema -- model-driven reconcile.
 //
 // Ties the pieces together: introspect the live DB (LiveSchemaIntrospector) →

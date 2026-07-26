@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // Typed graph traversal (surreal-linq-graph-query Phase 4). Asserts the arrow
 // path emit:
 //   Key(id)                                  -> SELECT * FROM type::record($_t,$_id)

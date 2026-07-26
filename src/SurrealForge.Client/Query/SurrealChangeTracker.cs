@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Client.Query -- lightweight unit-of-work change tracking for
 // SurrealContext (surreal-linq-graph-query Phase 3, decision D4).
 //

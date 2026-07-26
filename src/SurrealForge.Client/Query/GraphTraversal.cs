@@ -1,14 +1,14 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Client.Query -- typed graph traversal surface
 // (surreal-linq-graph-query Phase 4, the differentiator). Builds SurrealDB
 // arrow paths (->edge->table / <-edge<-table) from the modeled [RelateEdge]
 // POCOs, so a fork-lineage walk is a typed graph query instead of a raw
 // string or a client-side scalar loop.
 //
-//   q.Key(runId).Traverse(r => r.Out<ForkedFrom>().To<QuestRun>())
-//     -> SELECT ->forked_from->quest_run AS result FROM <table>:<id>
-//   q.Key(runId).Traverse(r => r.In<ForkedFrom>().From<QuestRun>())
-//     -> SELECT <-forked_from<-quest_run AS result FROM <table>:<id>
+//   q.Key(runId).Traverse(r => r.Out<ForkedFrom>().To<WorkflowRun>())
+//     -> SELECT ->forked_from->workflow_run AS result FROM <table>:<id>
+//   q.Key(runId).Traverse(r => r.In<ForkedFrom>().From<WorkflowRun>())
+//     -> SELECT <-forked_from<-workflow_run AS result FROM <table>:<id>
 //
 // Unbounded recursive collection (the whole ancestor chain in one statement)
 // is intentionally NOT emitted here: the pinned SurrealDB's recursive path
@@ -80,7 +80,7 @@ namespace SurrealForge.Client.Query
     }
 
     /// <summary>
-    /// A resolved arrow path (e.g. <c>-&gt;forked_from-&gt;quest_run</c>). The
+    /// A resolved arrow path (e.g. <c>-&gt;forked_from-&gt;workflow_run</c>). The
     /// <see cref="SurrealQuery{T}.Traverse"/> emitter wraps it as the SELECT
     /// projection of the anchored query.
     /// </summary>

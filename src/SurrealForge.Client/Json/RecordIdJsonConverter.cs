@@ -8,7 +8,7 @@ namespace SurrealForge.Client.Json;
 /// Serialises <see cref="RecordId"/> as the SurrealDB <c>table:id</c> string
 /// form, the wire shape produced by SurrealDB itself for record-id columns.
 /// Reads tolerate both the string form and the object form
-/// <c>{ "tb": "wallet", "id": "abc" }</c> that the CBOR-over-WS protocol
+/// <c>{ "tb": "customer", "id": "abc" }</c> that the CBOR-over-WS protocol
 /// sometimes emits when the response is parsed back into JSON.
 /// </summary>
 public sealed class RecordIdJsonConverter : JsonConverter<RecordId>

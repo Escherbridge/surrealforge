@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Client -- marker interface implemented by every SurrealDB POCO.
 // The POCOs are hand-authored under Persistence/SurrealDb/Models/ and decorated
 // with [SurrealTable]; the AttributeSchemaScanner in SurrealForge.Schema
@@ -39,7 +39,7 @@ namespace SurrealForge.Client
     public interface ISurrealRecord
     {
         /// <summary>
-        /// The SurrealDB table this record type maps to (e.g. <c>"wallet"</c>).
+        /// The SurrealDB table this record type maps to (e.g. <c>"customer"</c>).
         /// Implementations typically return a string constant. POCOs that
         /// also carry the <c>[SurrealTable]</c> attribute can return the
         /// same value (or skip this property entirely if the registry is

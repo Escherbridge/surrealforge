@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Schema -- live-schema introspection.
 //
 // Reads the ACTUAL deployed schema from a connected SurrealDB via

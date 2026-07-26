@@ -1,7 +1,6 @@
 # SurrealDB attribute annotations & naming conventions
 
-Reference for the C#-first authoring surface introduced by
-[DESIGN-mermaid-portfolio.md](../../../conductor/tracks/surrealql-toolkit/DESIGN-mermaid-portfolio.md).
+Reference for the package's C#-first schema-authoring surface.
 
 These attributes live in `SurrealForge.Client.Schema`. POCOs in the
 consumer project decorate themselves with them; the `surrealforge`
@@ -13,15 +12,15 @@ subcommands consume them at build / publish time.
 ```csharp
 using SurrealForge.Client.Schema;
 
-[SurrealTable("wallet",
-    Aggregate = "Wallet (Models/Wallet.cs)",
+[SurrealTable("customer_profile",
+    Aggregate = "CustomerProfile (Models/CustomerProfile.cs)",
     Guardrail = "G6 SCHEMAFULL")]
-[SurrealNote("No balance field -- chain is source of truth.")]
-[Slice("wallet_nft")]
-[Index("wallet_avatar_chain_address",
-       Fields = new[] { "avatar_id", "chain_type", "address" },
+[SurrealNote("Display preferences are stored separately from credentials.")]
+[Slice("customer_management")]
+[Index("customer_profile_customer_region_handle",
+       Fields = new[] { "customer_id", "region", "handle" },
        Unique = true)]
-public sealed class Wallet
+public sealed class CustomerProfile
 {
     [Id]
     [Column(Order = 1, Type = "string")]
@@ -29,11 +28,11 @@ public sealed class Wallet
 
     [Column(Order = 2, Type = "string")]
     [Assert("$value != NONE AND $value != \"\"")]
-    public string AvatarId { get; set; } = "";
+    public string CustomerId { get; set; } = "";
 
     [Column(Order = 8, Type = "string")]
-    [Inside("External", "Platform")]
-    public string WalletType { get; set; } = "";
+    [Inside("Standard", "Managed")]
+    public string ProfileType { get; set; } = "";
 
     [Column(Order = 7, Type = "bool")]
     [Default("false")]
@@ -45,27 +44,27 @@ Emits one `.surql` file:
 
 ```sql
 -- ============================================================
--- Table: wallet
--- Aggregate: Wallet (Models/Wallet.cs)
+-- Table: customer_profile
+-- Aggregate: CustomerProfile (Models/CustomerProfile.cs)
 -- Guardrail: G6 SCHEMAFULL
--- Note: No balance field -- chain is source of truth.
+-- Note: Display preferences are stored separately from credentials.
 -- ============================================================
 
-DEFINE TABLE wallet SCHEMAFULL;
+DEFINE TABLE customer_profile SCHEMAFULL;
 
-DEFINE FIELD id ON TABLE wallet TYPE string;
-DEFINE FIELD avatar_id ON TABLE wallet TYPE string
+DEFINE FIELD id ON TABLE customer_profile TYPE string;
+DEFINE FIELD customer_id ON TABLE customer_profile TYPE string
     ASSERT $value != NONE AND $value != "";
-DEFINE FIELD is_default ON TABLE wallet TYPE bool
+DEFINE FIELD is_default ON TABLE customer_profile TYPE bool
     DEFAULT false;
-DEFINE FIELD wallet_type ON TABLE wallet TYPE string
-    ASSERT $value INSIDE ["External", "Platform"];
+DEFINE FIELD profile_type ON TABLE customer_profile TYPE string
+    ASSERT $value INSIDE ["Standard", "Managed"];
 
 -- ── Indexes ──────────────────────────────────────────────────
 
-DEFINE INDEX wallet_avatar_chain_address
-    ON TABLE wallet
-    FIELDS avatar_id, chain_type, address
+DEFINE INDEX customer_profile_customer_region_handle
+    ON TABLE customer_profile
+    FIELDS customer_id, region, handle
     UNIQUE;
 ```
 
@@ -77,7 +76,7 @@ DEFINE INDEX wallet_avatar_chain_address
 | `[SurrealTable(Aggregate = "...")]` | Free-text aggregate header line. | Emitted as `-- Aggregate: …`. |
 | `[SurrealTable(Guardrail = "...")]` | Guardrail tag header line. | Emitted as `-- Guardrail: …`. |
 | `[SurrealNote("…")]` | Long-form note. Stack as many as needed. | One `-- Note:` line per attribute occurrence. Multi-line strings split on `\n`. |
-| `[Slice("wallet_nft")]` | Aggregate-diagram slice membership. | Drives `<slice>.flowchart.mermaid` grouping + the `_unassigned` orphan bucket. |
+| `[Slice("customer_management")]` | Aggregate-diagram slice membership. | Drives `<slice>.flowchart.mermaid` grouping + the `_unassigned` orphan bucket. |
 | `[Index("name", Fields=…, Unique=true)]` | Multi-column index. | Use on the class when more than one column participates. `Fields` is required at the class level. |
 
 ## Property-level attributes
@@ -135,7 +134,7 @@ error at DDL apply time.
 
 - Every persisted POCO **should** carry `[Slice("...")]`. Slice names
   use `snake_case`; convention is one slice per logical aggregate
-  (`wallet_nft`, `quest`, `bridge`, `dapp_composition`).
+  (`customer_management`, `project_planning`, `document_collection`).
 - POCOs without `[Slice]` cluster under the literal name
   `_unassigned` in the master flowchart. This is intentional — an
   orphan bucket is more useful than silently dropping the entity.
@@ -149,12 +148,11 @@ error at DDL apply time.
 ```
 graph LR
     %% Define Nodes
-    wallet[wallet: Node]:::nodeClass
-    nft_ownership[nft_ownership: Node]:::nodeClass
+    customer[customer: Node]:::nodeClass
+    customer_profile[customer_profile: Node]:::nodeClass
 
     %% Define Edges
-    avatar -- "OWNS [1:N]" --> wallet
-    avatar -- "OWNS [1:N]" --> nft_ownership
+    customer -- "OWNS [1:N]" --> customer_profile
 
     classDef nodeClass fill:#f9f9f9,stroke:#333,stroke-width:2px,rx:10px,ry:10px;
 ```
@@ -171,14 +169,14 @@ graph LR
 ```
 graph LR
 
-    subgraph wallet_nft ["wallet_nft"]
-        wallet[wallet: Node]:::nodeClass
-        nft_ownership[nft_ownership: Node]:::nodeClass
+    subgraph customer_management ["customer_management"]
+        customer[customer: Node]:::nodeClass
+        customer_profile[customer_profile: Node]:::nodeClass
     end
 
-    subgraph quest ["quest"]
-        quest[quest: Node]:::nodeClass
-        quest_node[quest_node: Node]:::nodeClass
+    subgraph project_planning ["project_planning"]
+        project[project: Node]:::nodeClass
+        project_task[project_task: Node]:::nodeClass
     end
 
     subgraph _unassigned ["_unassigned"]
@@ -186,8 +184,8 @@ graph LR
     end
 
     %% Edges (slice-local + cross-slice)
-    avatar -- "OWNS [1:N]" --> wallet
-    quest -- "INSTANTIATES [N:1]" --> quest_template
+    customer -- "OWNS [1:N]" --> customer_profile
+    project -- "USES [N:1]" --> project_template
 
     classDef nodeClass fill:…
 ```
@@ -199,14 +197,14 @@ clusters; cross-slice edges connect cluster boundaries.
 
 | SurrealDB construct | Naming rule | Example |
 |---|---|---|
-| Table | `snake_case` singular noun | `wallet`, `quest_node` |
-| Column | `snake_case` | `avatar_id`, `created_at` |
-| Index | `<table>_<columns>_<suffix>` | `wallet_avatar_chain_address` (compound), `nft_avatar_id` (single), `swap_state_idempotency_key` |
-| Unique index | …`_unique` suffix when the uniqueness is the discriminator; otherwise just include in the name | `wallet_avatar_chain_address` is implicitly unique by name shape |
-| HNSW index | `hnsw_<table>_<column>` | `hnsw_quest_embedding` |
-| Slice | `snake_case`, aggregate-named | `wallet_nft`, `dapp_composition` |
+| Table | `snake_case` singular noun | `customer`, `project_task` |
+| Column | `snake_case` | `customer_id`, `created_at` |
+| Index | `<table>_<columns>_<suffix>` | `customer_region_handle` (compound), `document_owner_id` (single), `order_idempotency_key` |
+| Unique index | …`_unique` suffix when the uniqueness is the discriminator; otherwise just include in the name | `customer_region_handle` is implicitly unique by name shape |
+| HNSW index | `hnsw_<table>_<column>` | `hnsw_document_embedding` |
+| Slice | `snake_case`, aggregate-named | `customer_management`, `document_collection` |
 | RELATE edge table | `verb_past_tense` | `forked_from`, `executes`, `follows` |
-| State-machine enum | PascalCase CLR name; SurrealDB column stores the snake-cased enum-member name | `BridgeStatus` enum → `bridge_tx.status` column with `INSIDE ["Initiated", "Locked", …]` |
+| State-machine enum | PascalCase CLR name; SurrealDB column stores the snake-cased enum-member name | `OrderStatus` enum → `order.status` column with `INSIDE ["Pending", "Processing", …]` |
 | Idempotency key column | `idempotency_key`, always `option<string>`, always `UNIQUE` indexed | required by the G2 guardrail |
 | Timestamp columns | `created_at` / `updated_at` / `completed_at` | type `datetime` (or `option<datetime>` for nullable end-states) |
 | Soft-delete marker | `is_active: bool DEFAULT true` | the *adapter* (not SurrealDB) enforces hide-on-delete |
@@ -226,10 +224,10 @@ clusters; cross-slice edges connect cluster boundaries.
 ## What does NOT cross to the attribute layer
 
 - **Executable validation logic** lives in a sibling partial-class
-  file (`Wallet.Validation.cs`), not in an attribute. The
+  file (`CustomerProfile.Validation.cs`), not in an attribute. The
   `OnValidating` partial method hook drives FluentValidation calls.
-- **Cross-aggregate composition** (e.g. "is this wallet owned by an
-  active avatar?") lives in the manager layer. Entity-level attributes
+- **Cross-aggregate composition** (e.g. "is this profile owned by an
+  active customer?") lives in the manager layer. Entity-level attributes
   never touch another aggregate.
 - **Generated POCO members** (equality, copy constructors) — those
   are emitted by the Roslyn source-gen and do not appear at the
@@ -244,10 +242,10 @@ depends on `Optional`:
 
 | Decoration | Emitted type | Flowchart label |
 |---|---|---|
-| `[References(typeof(Avatar))]` | `record<avatar>` | `[N:1]` |
-| `[References(typeof(Avatar), Optional = true)]` | `option<record<avatar>>` | `[N:0..1]` |
-| `[References(typeof(Avatar), EmitAsString = true)]` | `string` (escape hatch) | `[N:1]` |
-| `[References(typeof(Avatar), Optional = true, EmitAsString = true)]` | `option<string>` | `[N:0..1]` |
+| `[References(typeof(Customer))]` | `record<customer>` | `[N:1]` |
+| `[References(typeof(Customer), Optional = true)]` | `option<record<customer>>` | `[N:0..1]` |
+| `[References(typeof(Customer), EmitAsString = true)]` | `string` (escape hatch) | `[N:1]` |
+| `[References(typeof(Customer), Optional = true, EmitAsString = true)]` | `option<string>` | `[N:0..1]` |
 
 The scanner silently strips the legacy `ASSERT $value != NONE AND $value != ""`
 on record-typed columns — record IDs cannot be empty strings, and the
@@ -257,10 +255,9 @@ assert against a record literal is invalid SurrealQL.
 the wire as either the string form `"target:abc"` or the object form
 `{ "tb": "target", "id": "abc" }`. C# stores in `string PropertyName`
 properties retain the prefixed string form. Adapters that previously
-wrote `AvatarId = guid.ToString("N")` must now write
-`AvatarId = "avatar:" + guid.ToString("N")` — the
-[surrealdb-fk-adapter-migration](../../../conductor/tracks/) follow-up
-track owns this rewrite per-store.
+wrote `CustomerId = guid.ToString("N")` must now write
+`CustomerId = "customer:" + guid.ToString("N")`. Consumer migrations own
+that adapter rewrite.
 
 ## RELATE-edge tables
 
@@ -269,8 +266,8 @@ Tables that exist purely as graph edges between two other tables carry
 
 ```csharp
 [SurrealTable("forked_from")]
-[RelateEdge(typeof(QuestRun), typeof(QuestRun))]
-[Slice("quest")]
+[RelateEdge(typeof(WorkflowRun), typeof(WorkflowRun))]
+[Slice("workflow")]
 public partial class ForkedFrom : ISurrealRecord { ... }
 ```
 
@@ -278,7 +275,7 @@ The emitter renders this as a native SurrealDB relation table:
 
 ```sql
 DEFINE TABLE IF NOT EXISTS forked_from
-    TYPE RELATION FROM quest_run TO quest_run SCHEMAFULL;
+    TYPE RELATION FROM workflow_run TO workflow_run SCHEMAFULL;
 ```
 
 The synthetic `in` / `out` record columns SurrealDB creates from the
@@ -301,20 +298,19 @@ On the flowchart, a RELATE edge renders as an N:M arrow from `From` to
 ```sql
 -- ── Enums ─────────────────────────────────────────────────
 
--- BridgeTx.StatusKind
-DEFINE PARAM IF NOT EXISTS $bridge_tx_status VALUE
-    ["Initiated", "Locked", "AwaitingVAA", "VAAReady", "Redeeming",
-     "Completed", "Failed", "Refunded", "Reversing"];
+-- Order.StatusKind
+DEFINE PARAM IF NOT EXISTS $order_status VALUE
+    ["Pending", "Processing", "Completed", "Failed", "Cancelled"];
 
-DEFINE TABLE IF NOT EXISTS bridge_tx SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS order SCHEMAFULL;
 
 ...
 
-DEFINE FIELD IF NOT EXISTS status ON TABLE bridge_tx TYPE string
-    ASSERT $value INSIDE $bridge_tx_status;
+DEFINE FIELD IF NOT EXISTS status ON TABLE order TYPE string
+    ASSERT $value INSIDE $order_status;
 ```
 
-The C# enum name (e.g. `BridgeTx.StatusKind`) is preserved as a doc
+The C# enum name (e.g. `Order.StatusKind`) is preserved as a doc
 comment above the `DEFINE PARAM` so operators can match the closed set
 back to the POCO surface. The master flowchart also surfaces every
 closed set under a `%% Enums:` legend block at the top.

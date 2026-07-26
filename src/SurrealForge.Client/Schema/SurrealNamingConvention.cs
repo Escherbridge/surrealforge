@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Client.Schema -- the single naming-convention knob that
 // drives BOTH the runtime JSON property policy AND the schema column-name
 // fallback, so the C# property name, the JSON wire name, and the SurrealDB

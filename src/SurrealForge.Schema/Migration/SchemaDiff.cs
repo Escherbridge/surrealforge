@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Schema -- model-driven schema diff.
 //
 // Diffs a DESIRED SchemaModel (from AttributeSchemaScanner over C# POCOs)
@@ -343,8 +343,8 @@ namespace SurrealForge.Schema.Migration
         ///   * X → any / X → flexible object relaxations;
         ///   * int → decimal (numeric widening).
         /// </para>
-        /// The AZOA case (option&lt;string&gt; → array&lt;string&gt;) is NOT a
-        /// widening — it worked because the column was empty/compatible, which
+        /// An <c>option&lt;string&gt; → array&lt;string&gt;</c> change is NOT a
+        /// widening even when a particular empty column happens to coerce, which
         /// is exactly why a general tool must surface it as destructive unless
         /// the operator opts in.
         /// </summary>

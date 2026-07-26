@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Client.Query -- DbContext-equivalent over SurrealDB
 // (surreal-linq-graph-query Phase 3). Exposes typed deferred query sets
 // (Set<T>() -> SurrealQueryable<T>) plus a lightweight unit-of-work:

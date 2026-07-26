@@ -11,7 +11,7 @@ public sealed class SurrealIdentifierTests
 
     [Theory]
     [InlineData("wallet")]
-    [InlineData("bridge_tx")]
+    [InlineData("order_record")]
     [InlineData("avatar_nft")]
     [InlineData("operation_log")]
     [InlineData("swap_state")]
@@ -89,7 +89,7 @@ public sealed class SurrealIdentifierTests
 
     [Theory]
     [InlineData("wallet",    "abc123",         "wallet:abc123")]
-    [InlineData("bridge_tx", "550e8400-e29b",  "bridge_tx:550e8400-e29b")]
+    [InlineData("order_record", "550e8400-e29b",  "order_record:550e8400-e29b")]
     [InlineData("avatar",    "myid_42",        "avatar:myid_42")]
     public void ForRecordId_returns_combined_id(string table, string id, string expected)
     {

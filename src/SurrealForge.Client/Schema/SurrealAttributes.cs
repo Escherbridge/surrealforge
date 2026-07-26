@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Client -- C#-first schema authoring attribute surface.
 //
 // These attributes decorate POCOs in the consumer project. The
@@ -157,7 +157,7 @@ namespace SurrealForge.Client.Schema
 
         /// <summary>
         /// Explicit SurrealDB type token (<c>"string"</c>, <c>"option&lt;string&gt;"</c>,
-        /// <c>"record&lt;wallet&gt;"</c>, <c>"array&lt;string&gt;"</c>, ...). If
+        /// <c>"record&lt;customer&gt;"</c>, <c>"array&lt;string&gt;"</c>, ...). If
         /// omitted, the emitter infers from the CLR property type via the
         /// inverse of <c>CSharpTypeMapper.Map</c>.
         /// </summary>

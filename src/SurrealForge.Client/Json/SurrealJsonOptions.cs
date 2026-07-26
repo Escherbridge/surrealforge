@@ -75,7 +75,7 @@ public static class SurrealJsonOptions
         // 2026-06-07: SCHEMAFULL tables in SurrealDB v2.x reject any
         // CONTENT property that is not declared on the schema. The
         // ISurrealRecord interface's SchemaName instance property would
-        // otherwise serialize as "schemaName": "avatar" and trip the
+        // otherwise serialize as "schemaName": "customer" and trip the
         // server-side "Found field 'schemaName', but no such field exists
         // for table 'X'" parse-time error.
         //

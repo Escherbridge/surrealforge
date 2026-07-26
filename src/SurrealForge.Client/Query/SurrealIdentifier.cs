@@ -26,9 +26,9 @@ namespace SurrealForge.Client.Query
     /// <example>
     /// <code>
     /// // Correct — table name validated before use:
-    /// var table = SurrealIdentifier.ForTable("wallet");
-    /// var query = SurrealQuery.Of($"SELECT * FROM {table} WHERE owner = $owner")
-    ///                         .WithParam("owner", avatarId);
+    /// var table = SurrealIdentifier.ForTable("customer");
+    /// var query = SurrealQuery.Of($"SELECT * FROM {table} WHERE project = $project")
+    ///                         .WithParam("project", projectId);
     ///
     /// // Wrong — never do this:
     /// var query = SurrealQuery.Of($"SELECT * FROM {userInput} WHERE owner = $owner");
@@ -93,7 +93,7 @@ namespace SurrealForge.Client.Query
         /// <summary>
         /// Validates <paramref name="name"/> as a SurrealDB table identifier.
         ///
-        /// Accepted: <c>wallet</c>, <c>bridge_tx</c>, <c>avatar_nft</c>.
+        /// Accepted: <c>customer</c>, <c>order_item</c>, <c>document_tag</c>.
         /// Rejected: <c>USERS</c> (uppercase), <c>1users</c> (leading digit),
         ///           <c>users x</c> (space), <c>users; DROP TABLE x</c> (injection),
         ///           <c>select</c> (reserved word), <c>`users`x</c> (backtick).

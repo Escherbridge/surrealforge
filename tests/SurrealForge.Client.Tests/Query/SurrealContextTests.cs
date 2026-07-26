@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealContext unit-of-work (surreal-linq-graph-query Phase 3). Covers:
 //   * Set<T>() returns a deferred SurrealQueryable<T>
 //   * Add/Update/Remove emit CREATE/UPSERT/DELETE with bare-id type::record()

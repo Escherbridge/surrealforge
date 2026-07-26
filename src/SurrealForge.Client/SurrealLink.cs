@@ -1,10 +1,10 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Client -- helpers for foreign-key (record link) fields.
 //
 // SurrealDB schema fields typed `record<table>` (or `option<record<table>>`)
 // are FOREIGN KEYS. SurrealDB 1.5.x silently coerced a bare id string into the
 // link; 3.x strictly rejects it ("Couldn't coerce value ... Expected
-// record<avatar> but found 'b0a7...'"). The wire form 3.x DOES accept for such
+// record<customer> but found 'b0a7...'"). The wire form 3.x DOES accept for such
 // a field is the record-link STRING `table:id` (the object form {tb,id} is
 // rejected). These helpers produce/parse exactly that string so store POCOs can
 // keep a plain `string?` field while writing a value the engine accepts.
@@ -22,7 +22,7 @@ namespace SurrealForge.Client
     {
         /// <summary>
         /// Build the record-link string for a foreign-key field, e.g.
-        /// <c>ToLink("avatar", "b0a7...")</c> → <c>"avatar:b0a7..."</c>.
+        /// <c>ToLink("customer", "b0a7...")</c> → <c>"customer:b0a7..."</c>.
         /// Returns <c>null</c> when <paramref name="id"/> is null/empty so an
         /// <c>option&lt;record&lt;...&gt;&gt;</c> field stays unset.
         /// </summary>

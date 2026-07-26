@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Schema -- `surrealforge reset` verb.
 //
 // Wipes the configured SurrealDB namespace and re-applies all migrations so

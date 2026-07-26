@@ -1,8 +1,8 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Client -- typed RecordId<T> companion to the existing
 // untyped RecordId. Phantom-type parameter T pins the SurrealDB table at
-// compile time, eliminating the entire class of "passed a wallet:abc id
-// into a field that expects idempotency_key_store:..." bugs that the
+// compile time, eliminating the entire class of "passed a customer:abc id
+// into a field that expects project:..." bugs that the
 // untyped RecordId could not catch.
 //
 // Implementation notes:

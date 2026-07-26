@@ -51,6 +51,8 @@ internal sealed class FakeHttpHandler : HttpMessageHandler
             Body:   body,
             NsHeader: TryGetHeader(request, "Surreal-NS") ?? TryGetHeader(request, "NS"),
             DbHeader: TryGetHeader(request, "Surreal-DB") ?? TryGetHeader(request, "DB"),
+            AuthNsHeader: TryGetHeader(request, "Surreal-Auth-NS"),
+            AuthDbHeader: TryGetHeader(request, "Surreal-Auth-DB"),
             HasAuth: request.Headers.Authorization is not null));
 
         if (_responses.Count == 0)
@@ -70,5 +72,7 @@ internal sealed class FakeHttpHandler : HttpMessageHandler
         string? Body,
         string? NsHeader,
         string? DbHeader,
+        string? AuthNsHeader,
+        string? AuthDbHeader,
         bool HasAuth);
 }

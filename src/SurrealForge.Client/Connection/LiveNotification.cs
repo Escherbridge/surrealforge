@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Client.Connection -- live-query notification model
 // (surreal-linq-graph-query Phase 5). A LIVE SELECT subscription streams one
 // of these per change to a matching record over the WebSocket RPC transport.

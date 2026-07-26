@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Client.Query -- async materializers for the deferred
 // SurrealQueryable<T> (surreal-linq-graph-query Phase 2). Each folds the
 // accumulated expression tree into ONE SurrealQuery<T> and dispatches via the

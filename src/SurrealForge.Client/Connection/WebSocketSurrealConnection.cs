@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Client.Connection -- WebSocket (RPC) transport for LIVE
 // queries (surreal-linq-graph-query Phase 5, decision D8). Lives ALONGSIDE
 // HttpSurrealConnection; the HTTP /sql path is request/response and physically

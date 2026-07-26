@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // RecordId<T> -- typed record-id wrapper. Tests cover:
 //   * Implicit conversion to untyped RecordId preserves table + id
 //   * Explicit conversion from untyped RecordId with matching schema succeeds

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Schema -- shared read accessors over SchemaModel annotations.
 //
 // Both SurqlEmitter (emit) and SchemaDiff (compare) need to pull the primary

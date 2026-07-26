@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SchemaDiff unit tests -- the model-driven diff that detects field TYPE
 // changes (the production bug), plus adds/removes/constraint changes and the
 // no-op case. Uses SchemaModelTestFactory for terse fixtures.
@@ -27,7 +27,7 @@ namespace SurrealForge.Schema.Tests.Migration
         [Fact]
         public void Field_type_change_is_detected_as_TypeChanged()
         {
-            // The exact AZOA production case: option<string> -> array<string>.
+            // A representative destructive change: option<string> -> array<string>.
             var desired = NewModel(Table("api_key", Field("scopes", "array<string>")));
             var actual = NewModel(Table("api_key", Field("scopes", "option<string>")));
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Schema -- intermediate-representation (IR) of a SurrealDB
 // schema, neutral to its origin.
 //

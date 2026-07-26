@@ -20,23 +20,23 @@ public sealed class SurrealQueryCombineTests
     [Fact]
     public void Combine_joins_statements_with_semicolon_separators()
     {
-        var q1 = SurrealQuery.Of("SELECT * FROM wallet")
+        var q1 = SurrealQuery.Of("SELECT * FROM customer")
                               .WithParams(new System.Collections.Generic.Dictionary<string, object?>());
-        var q2 = SurrealQuery.Of("SELECT * FROM avatar");
-        var q3 = SurrealQuery.Of("SELECT * FROM bridge_tx");
+        var q2 = SurrealQuery.Of("SELECT * FROM profile");
+        var q3 = SurrealQuery.Of("SELECT * FROM order_record");
 
         var combined = SurrealQuery.Combine(q1, q2, q3);
 
         combined.Sql.Should().Be(
-            "SELECT * FROM wallet; SELECT * FROM avatar; SELECT * FROM bridge_tx;");
+            "SELECT * FROM customer; SELECT * FROM profile; SELECT * FROM order_record;");
         combined.IsMultiStatement.Should().BeTrue();
     }
 
     [Fact]
     public void Combine_merges_parameter_bags()
     {
-        var q1 = SurrealQuery.Of("SELECT * FROM wallet WHERE owner = $a").WithParam("a", "x");
-        var q2 = SurrealQuery.Of("SELECT * FROM avatar WHERE id = $b").WithParam("b", "y");
+        var q1 = SurrealQuery.Of("SELECT * FROM customer WHERE owner = $a").WithParam("a", "x");
+        var q2 = SurrealQuery.Of("SELECT * FROM profile WHERE id = $b").WithParam("b", "y");
 
         var combined = SurrealQuery.Combine(q1, q2);
 
@@ -48,7 +48,7 @@ public sealed class SurrealQueryCombineTests
     [Fact]
     public void Combine_requires_at_least_two_queries()
     {
-        var q1 = SurrealQuery.Of("SELECT * FROM wallet");
+        var q1 = SurrealQuery.Of("SELECT * FROM customer");
 
         var actNone = () => SurrealQuery.Combine();
         var actOne  = () => SurrealQuery.Combine(q1);
@@ -60,7 +60,7 @@ public sealed class SurrealQueryCombineTests
     [Fact]
     public void Combine_rejects_null_query_in_list()
     {
-        var q1 = SurrealQuery.Of("SELECT * FROM wallet");
+        var q1 = SurrealQuery.Of("SELECT * FROM customer");
         var act = () => SurrealQuery.Combine(q1, null!);
 
         act.Should().Throw<ArgumentException>().WithMessage("*null*");
@@ -69,9 +69,9 @@ public sealed class SurrealQueryCombineTests
     [Fact]
     public void Combine_rejects_already_combined_query_no_nesting()
     {
-        var q1 = SurrealQuery.Of("SELECT * FROM wallet");
-        var q2 = SurrealQuery.Of("SELECT * FROM avatar");
-        var q3 = SurrealQuery.Of("SELECT * FROM bridge_tx");
+        var q1 = SurrealQuery.Of("SELECT * FROM customer");
+        var q2 = SurrealQuery.Of("SELECT * FROM profile");
+        var q3 = SurrealQuery.Of("SELECT * FROM order_record");
 
         var first  = SurrealQuery.Combine(q1, q2);
         var actNest = () => SurrealQuery.Combine(first, q3);
@@ -89,8 +89,8 @@ public sealed class SurrealQueryCombineTests
         // consumer can address each by index without one swallowing another.
         var json =
             "[" +
-            "{\"status\":\"OK\",\"time\":\"1µs\",\"result\":[{\"id\":\"wallet:1\"}]}," +
-            "{\"status\":\"OK\",\"time\":\"2µs\",\"result\":[{\"id\":\"avatar:2\"},{\"id\":\"avatar:3\"}]}," +
+            "{\"status\":\"OK\",\"time\":\"1µs\",\"result\":[{\"id\":\"customer:1\"}]}," +
+            "{\"status\":\"OK\",\"time\":\"2µs\",\"result\":[{\"id\":\"profile:2\"},{\"id\":\"profile:3\"}]}," +
             "{\"status\":\"OK\",\"time\":\"3µs\",\"result\":[]}" +
             "]";
 
@@ -112,7 +112,7 @@ public sealed class SurrealQueryCombineTests
         var json =
             "[" +
             "{\"status\":\"OK\",\"result\":[]}," +
-            "{\"status\":\"ERR\",\"detail\":\"constraint violation on wallet\"}" +
+            "{\"status\":\"ERR\",\"detail\":\"constraint violation on customer\"}" +
             "]";
 
         var response = SurrealResponse.FromJson(json);
@@ -126,15 +126,15 @@ public sealed class SurrealQueryCombineTests
     {
         var json =
             "[" +
-            "{\"status\":\"OK\",\"result\":[{\"id\":\"wallet:1\",\"owner\":\"alice\"}]}," +
-            "{\"status\":\"OK\",\"result\":[{\"id\":\"wallet:2\",\"owner\":\"bob\"}," +
-                                             "{\"id\":\"wallet:3\",\"owner\":\"carol\"}]}" +
+            "{\"status\":\"OK\",\"result\":[{\"id\":\"customer:1\",\"owner\":\"alice\"}]}," +
+            "{\"status\":\"OK\",\"result\":[{\"id\":\"customer:2\",\"owner\":\"bob\"}," +
+                                             "{\"id\":\"customer:3\",\"owner\":\"carol\"}]}" +
             "]";
 
         var response = SurrealResponse.FromJson(json);
 
-        var s0 = response.GetValues<WalletRow>(0);
-        var s1 = response.GetValues<WalletRow>(1);
+        var s0 = response.GetValues<CustomerRow>(0);
+        var s1 = response.GetValues<CustomerRow>(1);
 
         s0.Should().HaveCount(1);
         s0[0].Owner.Should().Be("alice");
@@ -144,5 +144,5 @@ public sealed class SurrealQueryCombineTests
         s1[1].Owner.Should().Be("carol");
     }
 
-    private sealed record WalletRow(string Id, string Owner);
+    private sealed record CustomerRow(string Id, string Owner);
 }

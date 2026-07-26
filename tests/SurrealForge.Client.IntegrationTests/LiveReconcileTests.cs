@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: UNLICENSED
-// Model-driven reconcile regression test -- the EXACT AZOA production scenario.
+// SPDX-License-Identifier: MIT
+// Model-driven reconcile regression for a destructive type-shape change.
 //
 // Create a table with a field TYPE string, then reconcile to a model where that
 // field is array<string>, and assert the LIVE field type actually changed.

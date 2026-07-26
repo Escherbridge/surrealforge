@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Schema -- HTTP `POST /sql` adapter for the CLI.
 //
 // Why this lives in the Schema package rather than Client:

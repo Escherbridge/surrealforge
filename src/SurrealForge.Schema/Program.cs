@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Schema -- `surrealforge` CLI tool entry point (Phase 4 task 24).
 //
 // Subcommands:

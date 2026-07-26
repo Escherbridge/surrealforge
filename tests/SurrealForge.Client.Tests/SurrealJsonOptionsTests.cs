@@ -28,7 +28,7 @@ public class SurrealJsonOptionsTests
     {
         var row = new BridgeRow
         {
-            Id     = "bridge_tx:1",
+            Id     = "order:1",
             Status = BridgeStatus.Confirmed,
             // M1: DateTime fields must be UTC-kind explicitly; the converter
             // refuses Kind=Unspecified to prevent silent TZ drift.

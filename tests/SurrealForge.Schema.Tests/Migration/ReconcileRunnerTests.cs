@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // ReconcileRunner tests -- end-to-end (in-memory) of introspect -> diff ->
 // OVERWRITE apply. A scripted connection returns INFO FOR DB / TABLE bodies and
 // captures the DDL the runner sends, so we assert the exact OVERWRITE that

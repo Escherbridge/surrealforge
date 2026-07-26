@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurqlSchemaReader tests -- parsing emitted .surql back into a SchemaModel so
 // it can be the reconcile DESIRED model when no assembly is available (the
 // deploy-container path).

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // LiveSchemaIntrospector parse tests -- turning INFO FOR DB / INFO FOR TABLE
 // JSON replies (and the DEFINE-string values inside them) back into a
 // SchemaModel. No live server: we feed captured response bodies.

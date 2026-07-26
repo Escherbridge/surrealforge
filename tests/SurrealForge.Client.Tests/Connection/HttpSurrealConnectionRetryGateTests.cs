@@ -145,7 +145,7 @@ public class HttpSurrealConnectionRetryGateTests
     [InlineData("CANCEL TRANSACTION;")]
     [InlineData("DEFINE TABLE wallet SCHEMAFULL")]
     [InlineData("REMOVE TABLE wallet")]
-    [InlineData("USE NS azoa DB test")]
+    [InlineData("USE NS sample DB test")]
     [InlineData("SELECTOR x")]      // pseudo-keyword — must not be matched as SELECT
     [InlineData("BEGINS")]          // not BEGIN
     [InlineData("")]

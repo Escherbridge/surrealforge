@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // Test helpers: build small SchemaModel fixtures for diff/reconcile tests
 // without standing up POCO reflection.
 

@@ -23,7 +23,7 @@ namespace SurrealForge.Client.Idempotency
         public string Key { get; set; } = string.Empty;
 
         /// <summary>
-        /// Logical operation type (e.g. "bridge_redeem", "faucet_dispense").
+        /// Logical operation type (e.g. "order_fulfill", "report_generate").
         /// Aids diagnostics; the uniqueness guarantee is on <see cref="Key"/> alone.
         /// </summary>
         public string OperationType { get; set; } = string.Empty;

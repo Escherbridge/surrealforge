@@ -35,7 +35,7 @@ Net: additive-only. Reconcile closes the gap.
    `SchemaChangeSet`: tables added/removed; fields Added / Removed / TypeChanged
    / ConstraintChanged; indexes added/removed/changed. `IsWidening` marks a
    type change non-destructive only for known value-preserving cases
-   (`X → option<X>`, `int → decimal`); everything else (incl. the AZOA
+   (`X → option<X>`, `int → decimal`); everything else (including
    `option<string> → array<string>`) is destructive-by-default and needs opt-in.
 
 3. **`ReconcileRunner`** — introspect → diff → emit `DEFINE … OVERWRITE`
@@ -88,8 +88,8 @@ An OVERWRITE that narrows a type fails server-side when existing rows can't
 coerce. `ReconcileRunner` recognises the SurrealDB coercion phrasings and throws
 `SchemaCoercionException` naming the field + server detail (CLI exit code 4) —
 never a silent corruption. The operator backfills/migrates the column, then
-re-runs. The AZOA case worked because the column was empty/compatible; a general
-tool must report the incompatible case legibly.
+re-runs. An empty/compatible column can make one deployment appear to work, but
+a general tool must still report the incompatible case legibly.
 
 ## Determinism / safety
 

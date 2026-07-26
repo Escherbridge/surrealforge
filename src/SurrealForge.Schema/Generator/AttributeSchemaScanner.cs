@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 // SurrealForge.Schema -- C#-first attribute scanner.
 //
 // Reflects over a set of POCO types decorated with the
