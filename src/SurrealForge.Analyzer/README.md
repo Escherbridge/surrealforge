@@ -37,9 +37,19 @@ the H3 bypass surface identified in code review.
 
 ### Allowlist
 
-Code inside namespaces containing `Core.SurrealDb.Query` or
-`SurrealForge.Client.Query` is exempt — these are the safe construction
-layers themselves.
+Code whose enclosing namespace contains any of the following is exempt —
+these are the safe construction layers themselves, so a blanket
+"no interpolation" rule is not a value-correct test inside them:
+
+| Namespace fragment | Why it is trusted |
+|---|---|
+| `Core.SurrealDb.Query` | Legacy in-repo builder layer. |
+| `SurrealForge.Client.Query` | The parameterized `SurrealQuery` builder. |
+| `SurrealForge.Vector` | Vector query builder. The KNN operator and brute-force shapes concatenate **validated** identifiers and invariant-formatted `K`/`EF` ints (SurrealDB cannot parameterize them); the embedding itself stays `$q`-bound. |
+| `SurrealForge.Schema.Migration` | Migration runner. Emits compile-time literals keyed by a sanitised record id, with a `JsonEscape` helper for the one operator-supplied field (`applied_by`). |
+
+Matching is namespace-substring based; making the allowlist
+consumer-configurable is a tracked follow-up.
 
 ## Consuming the analyzer
 
@@ -49,7 +59,7 @@ library:
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="SurrealForge.Analyzer" Version="0.1.0" PrivateAssets="all" />
+  <PackageReference Include="SurrealForge.Analyzer" Version="0.5.0" PrivateAssets="all" />
 </ItemGroup>
 ```
 

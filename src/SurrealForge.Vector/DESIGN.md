@@ -1,7 +1,8 @@
 # SurrealForge.Vector — package family design
 
-Status: **approved plan** (Phase 0 landed in this branch; Phases 1–4 pending).
-Target version: 0.4.0 (all packages release in lockstep via `Directory.Build.props`).
+Status: Phase 0 shipped in 0.4.0; **Phase 1 shipped in 0.5.0** (core package,
+live-verified against SurrealDB 3.2.4). Phases 2–4 pending.
+Target version: 0.5.0 (all packages release in lockstep via `Directory.Build.props`).
 
 ## Goal
 
@@ -173,7 +174,9 @@ Note: bge-small is **not** Matryoshka — do not claim truncatable dims.
 ## Phase 4 — docs / sample / packaging
 
 README + sample app; `AGENTS.md` per new directory; add projects to
-`SurrealForge.slnx`; bump `Directory.Build.props` to 0.4.0.
+`SurrealForge.slnx`; bump `Directory.Build.props`. Done for the Phase-1 core in
+0.5.0 (README §Vector search and embeddings, `AGENTS.md`, slnx entry, publish
+workflow pack step); the sample app and the Onnx packages remain outstanding.
 
 ## Ops guidance (Railway / small-container deployments)
 
@@ -187,8 +190,9 @@ README + sample app; `AGENTS.md` per new directory; add projects to
 
 - Mean-pooling + L2-norm is mandatory (raw output is per-token).
 - WordPiece `vocab.txt` tokenizer, not `tokenizer.json`/SharpToken.
-- Support indexed `<|K|>` KNN **and** brute-force `vector::similarity::*`,
-  not brute-force only.
+- Support indexed KNN **and** brute-force `vector::similarity::*`, not
+  brute-force only. The indexed operator is `<|K,EF|>` — SurrealDB 3.x removed
+  the bare `<|K|>` form and rejects it outright.
 - bge-small is not Matryoshka.
 - All source citations in the original pasted advice were hallucinated — cite
   nothing from it.

@@ -1,10 +1,10 @@
 # SurrealForge
 
 A homebaked **SurrealDB toolkit for .NET** — a dependency-light HTTP client, a
-C#-first schema/migration engine, and a Roslyn analyzer that keeps your
-SurrealQL injection-safe. Built as a focused alternative to the pre-1.0
-`SurrealDb.Net` SDK, extracted from a production workflow engine and released
-under MIT.
+C#-first schema/migration engine, a vector-search and embedding-pipeline layer,
+and a Roslyn analyzer that keeps your SurrealQL injection-safe. Built as a
+focused alternative to the pre-1.0 `SurrealDb.Net` SDK, extracted from a
+production workflow engine and released under MIT.
 
 Targets `netstandard2.0` and `net10.0`, so it runs everywhere from .NET
 Framework tooling to the latest runtime.
@@ -16,6 +16,7 @@ Framework tooling to the latest runtime.
 | [`SurrealForge.Client`](src/SurrealForge.Client) | `netstandard2.0;net10.0` | HTTP transport (`POST /sql`), a **parameterized** `SurrealQuery` builder, a `SurrealIdentifier` reserved-word denylist, multi-statement composition, explicit `BeginTransactionAsync()`, JSON converters (with `JsonStringEnumConverter` on by default), and a connection pool with jittered retry. |
 | [`SurrealForge.Schema`](src/SurrealForge.Schema) | `netstandard2.0;net10.0` (+ CLI on `net10.0`) | Mermaid-ER parser, `.surql` generator, migration runner backed by a `schema_migration` checksum table, **model-driven reconcile** (live introspection + diff + `DEFINE … OVERWRITE` field evolution), and the `surrealforge` dotnet tool (`up`, `migrate up\|status\|dry-run`, `generate <file>`, `validate <file>`). |
 | [`SurrealForge.Analyzer`](src/SurrealForge.Analyzer) | `netstandard2.0` | Roslyn analyzer **SRDB0001** (error severity) — bans string-interpolated / concatenated SurrealQL outside the safe query-builder layer, with one-hop variable resolution to close the most common bypass. |
+| [`SurrealForge.Vector`](src/SurrealForge.Vector) | `netstandard2.0;net10.0` | Vector search (indexed HNSW KNN + brute-force `vector::similarity::*`), an `IVectorEncoder` abstraction with a mandatory batch overload, content-hash embedding cache, token-budgeted `TextChunker`, and schema-declared embedding backfill jobs. **No ONNX dependency** — bring your own encoder. |
 
 ## Install
 
@@ -23,6 +24,7 @@ Framework tooling to the latest runtime.
 dotnet add package SurrealForge.Client
 dotnet add package SurrealForge.Schema    # optional: schema + migrations + CLI
 dotnet add package SurrealForge.Analyzer  # optional: compile-time SurrealQL safety
+dotnet add package SurrealForge.Vector    # optional: vector search + embedding pipeline
 ```
 
 The CLI tool:
@@ -309,6 +311,141 @@ type, the apply fails with a clear `SchemaCoercionException` (exit code 4)
 naming the field — never a silent corruption. See
 [`src/SurrealForge.Schema/Migration/AGENTS.md`](src/SurrealForge.Schema/Migration/AGENTS.md).
 
+## Vector search and embeddings
+
+`SurrealForge.Vector` adds KNN search and an embedding pipeline on top of the
+client. It has **no ONNX or model dependency** — you supply the encoder, so the
+package stays small and you keep control of where embedding CPU is spent.
+
+### Searching
+
+Declare the vector column and its index on the model, reconcile as usual, then
+search through any `ISurrealExecutor`:
+
+```csharp
+[SurrealTable("article")]
+public sealed class Article
+{
+    [Column(Order = 1)]
+    public string? Title { get; set; }
+
+    [Column(Order = 2, Type = "array<float>")]
+    [HnswIndex("hnsw_article_embedding", Dimension = 384, Distance = "COSINE")]
+    public float[]? Embedding { get; set; }
+}
+
+// Indexed HNSW KNN — the fast path.
+var hits = await executor.VectorSearchAsync<Article>("embedding", queryVector, k: 10);
+
+foreach (var hit in hits)
+    Console.WriteLine($"{hit.Record.Title} (dist {hit.Distance:F4})");
+```
+
+The embedding is **always** bound as `$q`, never interpolated — the
+`SurrealForge.Vector` namespace is on the SRDB0001 allowlist for exactly this
+reason. `K` and `EF` are range-checked ints (SurrealDB cannot parameterize
+them).
+
+Both search paths are available:
+
+```csharp
+// Brute-force, for un-indexed or small tables — no index required.
+var hits = await executor.VectorSearchAsync<Article>(
+    "embedding", queryVector,
+    new VectorSearchOptions
+    {
+        K = 10,
+        Strategy = VectorSearchStrategy.BruteForce,
+        Metric = VectorMetric.Cosine,          // or Euclidean / Manhattan
+        Filter = SurrealQuery.Of("status = $s").WithParam("s", "published"),
+    });
+```
+
+`Filter` merges an extra parameterized predicate into the same `WHERE` on
+either path. On the indexed path the index's own metric applies, so `Metric` is
+ignored there; `Ef` (the HNSW beam width) defaults to `max(K, 40)`.
+
+> **SurrealDB 3.x note:** the single-argument `<|K|>` operator was removed, so
+> the indexed path always emits `<|K,EF|>`. Verified live against SurrealDB
+> 3.2.4.
+
+### Embedding pipeline
+
+Encoders implement `IVectorEncoder`; the batch overload is mandatory, because
+batching is the only real throughput lever:
+
+```csharp
+public interface IVectorEncoder
+{
+    int Dimension { get; }
+    ValueTask<float[]> EncodeAsync(string text, CancellationToken ct = default);
+    ValueTask<float[][]> EncodeAsync(IReadOnlyList<string> texts, CancellationToken ct = default);
+}
+```
+
+Search embeds **one** string per query — negligible. Inserts embed **N**
+documents — the entire cost center. So where embedding happens is a per-field
+choice declared on the schema, not baked into the write path.
+
+> **What ships in 0.5.0:** `Batched` is wired end-to-end — declare it, register
+> the job, and the hosted service fills vectors for you. `WriteTime` is
+> currently a **declaration only**: no interceptor hooks `SurrealContext`'s save
+> pipeline yet, so a `WriteTime` field registers no job and nothing encodes on
+> your behalf. Until the interceptor lands, call the encoder yourself before
+> saving (wrap it in `CachedVectorEncoder` to get the content-hash skip).
+
+```csharp
+[SurrealTable("article")]
+public sealed class Article
+{
+    // Source text -> target vector column, with the mode declared inline.
+    [Column(Order = 1)]
+    [Embedded("embedding", Mode = EmbeddingMode.Batched)]   // or WriteTime
+    public string? Body { get; set; }
+
+    [Column(Order = 2, Type = "array<float>")]
+    [HnswIndex("hnsw_article_embedding", Dimension = 384, Distance = "COSINE")]
+    public float[]? Embedding { get; set; }
+}
+```
+
+The vector column can also be schema-only — put `[ExtraSurrealField("embedding",
+"array<float>")]` on the class instead, and the column exists in SurrealDB with
+no CLR property surfacing it.
+
+`EmbeddingSchemaScanner` turns those declarations into job definitions, and the
+hosted `EmbeddingBackfillService` drains them through a bounded channel
+(backpressure, not unbounded memory):
+
+```csharp
+services.AddSurrealForge(...);                 // executor, from SurrealForge.Client
+services.AddSurrealVectorSearch(o =>
+{
+    o.AddEncoder(new MyEncoder());             // default profile
+    o.AddJobsFrom<Article>();                  // Batched fields become jobs
+});
+```
+
+Backfill runs in three shapes — **incremental** (checkpointed pages over a
+historical window, resumable), **ad-hoc** (run-once over an explicit range,
+e.g. after a model upgrade), and **dynamic** (change-feed driven). Re-embedding
+unchanged text is a no-op: `IEmbeddingCache` is keyed by content hash, so
+write-time, incremental, and ad-hoc paths all skip work they've already done.
+`TextChunker` splits long documents into overlapping token-budgeted windows
+using char/token heuristics — no model dependency.
+
+Design rationale and the full job/config contract:
+[`src/SurrealForge.Vector/AGENTS.md`](src/SurrealForge.Vector/AGENTS.md).
+
+**Current limitations:** `WriteTime` mode is declarative only (see the note
+above). Dynamic (LIVE-query) jobs require you to supply your own
+`DynamicBackfillConfig.LiveSource` adapter — `RunDynamicAsync` throws
+`NotSupportedException` without one — because the client's live support sits on
+the concrete WebSocket transport rather than `ISurrealExecutor`. Both are
+tracked follow-ups, as is having the schema emitter auto-define the vector and
+hash columns from `[Embedded]` (today the attribute is inert to
+`AttributeSchemaScanner`, so you declare those columns yourself).
+
 ## Building from source
 
 ```bash
@@ -325,7 +462,7 @@ dotnet test    SurrealForge.slnx
 ## Versioning
 
 The version lives in one place — `Directory.Build.props` — and applies to all
-three packages, which are released in lockstep. Publishing happens via the
+four packages, which are released in lockstep. Publishing happens via the
 `publish` GitHub Actions workflow on a release tag (`v0.1.0`, …).
 
 ## License
@@ -334,13 +471,17 @@ MIT — see [LICENSE](LICENSE).
 
 ## Status
 
-`0.3.0` — adds model-driven reconcile (live introspection + diff + `DEFINE …
-OVERWRITE` field evolution) to `SurrealForge.Schema`. Additive, backwards
-compatible: existing additive-migration users are unaffected (reconcile is a
-no-op when the live schema already matches the model, and `--no-reconcile`
-opts out). The public API may still shift before `1.0`.
+`0.5.0` — adds the new `SurrealForge.Vector` package (KNN + brute-force search,
+encoder abstraction, chunking, content-hash embedding cache, schema-declared
+backfill jobs). Additive for existing users: the other three packages are
+unchanged apart from the version bump. The public API may still shift before
+`1.0`.
 
 Known limitations / roadmap:
+
+- **Vector dynamic jobs**: LIVE-query-driven backfill needs a caller-supplied
+  `LiveSource` adapter; first-class wiring is a tracked follow-up, as are the
+  planned `SurrealForge.Vector.Onnx` / `.Onnx.MiniLM` encoder packages.
 
 - **Typed-builder `Contains` → `INSIDE`**: under the .NET 10 SDK, translating
   `list.Contains(x.Field)` through the strongly-typed `SurrealQuery<T>.Where`

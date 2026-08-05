@@ -1,10 +1,89 @@
 # Changelog
 
 Notable changes to the SurrealForge packages (`SurrealForge.Client`,
-`SurrealForge.Schema`, `SurrealForge.Analyzer` — published in lockstep).
+`SurrealForge.Schema`, `SurrealForge.Analyzer`, `SurrealForge.Vector` —
+published in lockstep).
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is SemVer with the usual 0.x caveat that minor bumps may carry
 breaking changes (called out explicitly below).
+
+## [0.5.0] — 2026-08-04
+
+### Highlights
+
+New **`SurrealForge.Vector`** package: vector search and an embedding pipeline
+for SurrealDB, with no ONNX or model dependency. The other three packages are
+unchanged apart from the coordinated version bump.
+
+### Added
+
+- **`SurrealForge.Vector`** (`netstandard2.0;net10.0`) — the no-ONNX core of
+  the vector package family.
+  - **Search surface** — `ISurrealExecutor.VectorSearchAsync<T>(field, query,
+    …)` over both paths: indexed HNSW KNN (`SELECT *,
+    vector::distance::knn() AS dist … WHERE field <|K,EF|> $q ORDER BY dist`)
+    and brute-force (`vector::similarity::cosine` / `vector::distance::{
+    euclidean,manhattan}`, ordered by metric direction with `LIMIT k`). The
+    embedding is always a bound `$q` param, never interpolated; K/EF are
+    range-checked ints; table names resolve through `SurrealSchemaRegistry`
+    and field paths through a package-local allowlist. `VectorSearchOptions
+    .Filter` merges an extra parameterized predicate into the same `WHERE`.
+    Results come back as `VectorSearchResult<T>` — the `dist` projection is
+    split off the row, so consumer POCOs need no `dist` property.
+  - **Encoder abstraction** — `IVectorEncoder` with a mandatory batch
+    overload, a named-profile `VectorEncoderRegistry`, and
+    `CachedVectorEncoder` wrapping any encoder in an `IEmbeddingCache`.
+  - **Caching** — `IEmbeddingCache` keyed by content hash so re-embedding
+    unchanged text is a no-op across write-time, incremental, and ad-hoc
+    paths; `InMemoryEmbeddingCache` ships as the default (`TryAdd`, so
+    registering your own first wins).
+  - **Chunking** — `TextChunker`, a token-budgeted overlapping-window splitter
+    using char/token heuristics; no model dependency.
+  - **Schema-declared embedding jobs** — `[Embedded(targetColumn, Profile,
+    Mode)]` on the source text column (`EmbeddingMode.WriteTime` /
+    `Batched`); `EmbeddingSchemaScanner` turns declarations into job
+    definitions, and `EmbeddingBackfillService` (an `IHostedService`) drains
+    them through a bounded `Channel` for backpressure. Three job shapes:
+    incremental (checkpointed, resumable), ad-hoc (run-once over an explicit
+    range), and dynamic (change-feed driven). Wire up with
+    `services.AddSurrealVectorSearch(o => { o.AddEncoder(…); o.AddJobsFrom<T>(); })`.
+  - **Analyzer** — the `SurrealForge.Vector` namespace is on the SRDB0001
+    allowlist: this package is itself a safe-construction layer, same trust
+    status as `SurrealQuery`.
+  - **Scope for this release:** `EmbeddingMode.Batched` is wired end-to-end.
+    `WriteTime` is a declaration only — no interceptor hooks `SurrealContext`'s
+    save pipeline yet, and `AddJobsFrom<T>` registers jobs for `Batched` fields
+    only, so a `WriteTime` field encodes nothing on its own. Dynamic jobs need
+    a caller-supplied `DynamicBackfillConfig.LiveSource`. `[Embedded]` is inert
+    to `AttributeSchemaScanner`, so the vector and hash columns are declared by
+    hand. All three are tracked follow-ups.
+- **`[Embedded]` attribute** (`SurrealForge.Client`) — declares a string column
+  as the source text for a vector column, naming the target column, encoder
+  profile, and `EmbeddingMode`. Emits no DDL; documented in
+  `src/SurrealForge.Client/Schema/ANNOTATIONS.md` §Embedded columns, which also
+  gains the previously undocumented `[ExtraSurrealField]` entry.
+- **Live vector-search verification** —
+  `tests/SurrealForge.Client.IntegrationTests/LiveVectorSearchTests.cs` runs
+  every generated search shape against a real SurrealDB (indexed KNN, KNN with
+  explicit EF, KNN with a merged filter predicate, brute-force cosine /
+  euclidean / manhattan, brute-force with filter). Verified against SurrealDB
+  3.2.4.
+
+### Fixed
+
+- **Indexed KNN is no longer emitted with a bare `<|K|>` operator.** SurrealDB
+  3.x removed the single-argument form (it was the KTree/M-Tree spelling) and
+  rejects it with *"Invalid query: the `<|k|>` KNN operator … is no longer
+  supported"*. Since `VectorSearchOptions.Ef` defaults to null, the default
+  indexed search path failed outright on current SurrealDB. The two-argument
+  form is now always emitted, with an unset `Ef` falling back to `max(K, 40)`.
+  Caught by the new live tests — the SQL-shape unit tests never reach a
+  parser, so they could not have caught it.
+
+### Changed
+
+- `Directory.Build.props` version bumped to `0.5.0`; the publish workflow now
+  packs `SurrealForge.Vector` alongside the other three packages.
 
 ## [0.4.0] — 2026-07-25
 

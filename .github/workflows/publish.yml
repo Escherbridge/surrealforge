@@ -1,6 +1,6 @@
 name: Publish
 
-# Publishes all three packages to NuGet.org in lockstep via NuGet Trusted
+# Publishes all four packages to NuGet.org in lockstep via NuGet Trusted
 # Publishing (OIDC) — no long-lived API key. Requires a trusted-publishing
 # policy on nuget.org for owner `jadeoni`, repo `Escherbridge/surrealforge`,
 # workflow file `publish.yml`.
@@ -38,6 +38,7 @@ jobs:
           dotnet pack src/SurrealForge.Client/SurrealForge.Client.csproj     -c Release --no-build -o artifacts
           dotnet pack src/SurrealForge.Schema/SurrealForge.Schema.csproj     -c Release --no-build -o artifacts
           dotnet pack src/SurrealForge.Analyzer/SurrealForge.Analyzer.csproj -c Release --no-build -o artifacts
+          dotnet pack src/SurrealForge.Vector/SurrealForge.Vector.csproj     -c Release --no-build -o artifacts
 
       # Exchanges the GitHub OIDC token for a short-lived NuGet API key.
       - name: NuGet trusted-publishing login

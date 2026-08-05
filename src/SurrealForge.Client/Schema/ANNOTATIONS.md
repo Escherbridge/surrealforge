@@ -78,6 +78,7 @@ DEFINE INDEX customer_profile_customer_region_handle
 | `[SurrealNote("…")]` | Long-form note. Stack as many as needed. | One `-- Note:` line per attribute occurrence. Multi-line strings split on `\n`. |
 | `[Slice("customer_management")]` | Aggregate-diagram slice membership. | Drives `<slice>.flowchart.mermaid` grouping + the `_unassigned` orphan bucket. |
 | `[Index("name", Fields=…, Unique=true)]` | Multi-column index. | Use on the class when more than one column participates. `Fields` is required at the class level. |
+| `[ExtraSurrealField("embedding", "array<float>")]` | A SurrealDB column with **no CLR property**. | For fields the application writes via raw SurrealQL — vector embeddings are the motivating case — but which the POCO should not surface. Stackable; `Order` places it in the emitted field list exactly like `[Column(Order)]`. Also accepts `Assert`, `Default`, `FieldGroup`, `Flexible`. Nameable as a target by `[HnswIndex(Fields = …)]` and `[Embedded]`. |
 
 ## Property-level attributes
 
@@ -97,6 +98,7 @@ DEFINE INDEX customer_profile_customer_region_handle
 | `[Index("name")]` | Single-column index on this column. | Property-level shortcut; `Fields` defaults to the property's resolved column name. |
 | `[HnswIndex("hnsw_document_embedding", Dimension = 384)]` | HNSW vector index (approximate KNN). | Emits the full `HNSW DIMENSION … DIST …` clause. `Dimension` required; optional `Distance` (default `COSINE`), `Type` (`F32`/`F64`/…), `Efc`, `M`. See §Vector indexes. |
 | `[MTreeIndex("mtree_document_embedding", Dimension = 384)]` | MTREE vector index (exact KNN). | Same placement rules as `[HnswIndex]`; optional `Capacity` instead of `Efc`/`M`. See §Vector indexes. |
+| `[Embedded("embedding")]` | Marks this string column as the **source text** for a vector column. | Inert at schema-emit time — nothing is added to the `.surql`. Scanned by `SurrealForge.Vector`'s `EmbeddingSchemaScanner` into embedding job definitions. Optional `Profile` (encoder profile name, default `"default"`) and `Mode` (`EmbeddingMode.WriteTime` — encode on the request path — or `Batched` — a backfill job fills it). See §Embedded columns. |
 | `[FieldGroup("Logical group header")]` | Cosmetic separator above this field. | Renders as `-- Logical group header` on its own line in the `.surql`. Place on the **first** field of each group only. |
 
 ## Field-group placement (subtle but important)
@@ -142,6 +144,44 @@ Tuning knobs left unset (`Efc`, `M`, `Capacity`, `Type`) are omitted
 from the DDL so the server picks its defaults — and the reconcile diff
 treats unset-vs-server-default as **no drift** (see
 `SurrealForge.Schema/Migration/AGENTS.md` §Vector indexes).
+
+## Embedded columns
+
+`[Embedded]` pairs a source text column with the vector column its embedding
+lands in. It emits **nothing** — the schema layer stays ignorant of encoders —
+and is read by `SurrealForge.Vector` to build embedding jobs:
+
+```csharp
+[SurrealTable("article")]
+public sealed class Article
+{
+    [Column(Order = 1)]
+    [Embedded("embedding", Mode = EmbeddingMode.Batched)]
+    public string? Body { get; set; }
+
+    [Column(Order = 2, Type = "array<float>")]
+    [HnswIndex("hnsw_article_embedding", Dimension = 384)]
+    public float[]? Embedding { get; set; }
+}
+```
+
+The target column may equally be an `[ExtraSurrealField]` with no CLR property,
+which is the usual choice when the application never reads the raw vector.
+
+Mode picks where the CPU is spent, and it is the decision that matters at
+scale: `WriteTime` means encode inline during the insert/update (simple, but
+billable CPU on the request path), while `Batched` lets writes land with a
+null/stale vector for a backfill job to fill asynchronously. Search embeds one
+string per query; inserts embed N documents — so write volume, not query
+volume, is what should drive this choice.
+
+**As of 0.5.0 only `Batched` is wired end-to-end.** `AddJobsFrom<T>` registers
+jobs for `Batched` fields and skips the rest; no interceptor hooks the save
+pipeline yet, so a `WriteTime` declaration encodes nothing on its own — call
+the encoder yourself before saving until that lands. `[Embedded]` is likewise
+inert to `AttributeSchemaScanner`: it never emits the vector or hash columns,
+so declare those explicitly. Job configuration and the backfill runner live in
+`src/SurrealForge.Vector/AGENTS.md`.
 
 ## Default-value quoting rules
 

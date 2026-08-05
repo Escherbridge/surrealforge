@@ -3,7 +3,7 @@
   <!-- Single source of truth for the coordinated publish set. Package projects
        must release together when one directly references another package. -->
   <PropertyGroup>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <Authors>SurrealForge Contributors</Authors>
     <Company>SurrealForge</Company>
     <Product>SurrealForge</Product>
