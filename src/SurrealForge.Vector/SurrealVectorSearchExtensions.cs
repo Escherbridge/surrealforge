@@ -18,6 +18,9 @@ namespace SurrealForge.Vector;
 /// <summary>KNN / brute-force vector search extension on <see cref="ISurrealExecutor"/>.</summary>
 public static class SurrealVectorSearchExtensions
 {
+    /// <summary>Fallback HNSW beam width when the caller leaves <c>Ef</c> unset. See AGENTS.md §Query surface.</summary>
+    internal const int DefaultEf = 40;
+
     /// <summary>
     /// Runs a vector search over <typeparamref name="T"/>'s table (resolved
     /// via <see cref="SurrealSchemaRegistry"/>) and returns records with their
@@ -104,9 +107,11 @@ public static class SurrealVectorSearchExtensions
         {
             case VectorSearchStrategy.IndexedKnn:
             {
-                var op = o.Ef.HasValue
-                    ? "<|" + k + "," + o.Ef.Value.ToString(CultureInfo.InvariantCulture) + "|>"
-                    : "<|" + k + "|>";
+                // SurrealDB 3.x removed the single-argument `<|K|>` form (it was
+                // the KTree/M-Tree operator) — the HNSW path now requires an
+                // explicit beam width. See AGENTS.md §Query surface.
+                var ef = o.Ef ?? Math.Max(o.K, DefaultEf);
+                var op = "<|" + k + "," + ef.ToString(CultureInfo.InvariantCulture) + "|>";
                 sql = "SELECT *, vector::distance::knn() AS dist FROM " + table +
                       " WHERE " + safeField + " " + op + " $q";
                 if (filter is not null) sql += " AND (" + filter.Sql + ")";

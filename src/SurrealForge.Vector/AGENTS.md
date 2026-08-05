@@ -11,9 +11,15 @@ pointers.
 Two SQL paths, per DESIGN.md §Phase 1:
 
 - **Indexed KNN** — `SELECT *, vector::distance::knn() AS dist FROM t WHERE
-  field <|K[,EF]|> $q ORDER BY dist`. Requires the Phase-0 HNSW/MTREE index;
+  field <|K,EF|> $q ORDER BY dist`. Requires the Phase-0 HNSW/MTREE index;
   the operator caps results at K, so no LIMIT is emitted. The index's own
   metric applies — `VectorSearchOptions.Metric` is ignored on this path.
+  The two-argument form is **mandatory**: SurrealDB 3.x removed the bare
+  `<|K|>` operator (it was the KTree/M-Tree spelling) and rejects it as an
+  invalid query, so an unset `VectorSearchOptions.Ef` falls back to
+  `max(K, 40)` rather than omitting the beam width. Verified live against
+  SurrealDB 3.2.4 by `LiveVectorSearchTests` — the SQL-shape unit tests alone
+  could not catch this, since they never reach a parser.
 - **Brute-force** — `vector::similarity::cosine(field, $q)` (ORDER BY dist
   **DESC**: similarity ranks high-is-close) or
   `vector::distance::{euclidean,manhattan}` (ORDER BY dist **ASC**), always
@@ -182,4 +188,6 @@ no `IsExternalInit` polyfill is needed here.
   ships the mode declaration + `CachedVectorEncoder` seam only.
 - Schema-emitter surfacing of `[Embedded]` (auto-defining the vector + hash
   columns) — the attribute is inert to `AttributeSchemaScanner` today.
-- README/sample/packaging polish (Phase 4).
+- Sample app (Phase 4). README §Vector search and embeddings, the
+  `[Embedded]` / `[ExtraSurrealField]` entries in Client's `ANNOTATIONS.md`,
+  and the publish-workflow pack step all landed with 0.5.0.

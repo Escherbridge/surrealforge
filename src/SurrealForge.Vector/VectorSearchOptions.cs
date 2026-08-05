@@ -26,7 +26,12 @@ public sealed class VectorSearchOptions
     /// <summary>Search path. Default <see cref="VectorSearchStrategy.IndexedKnn"/>.</summary>
     public VectorSearchStrategy Strategy { get; set; } = VectorSearchStrategy.IndexedKnn;
 
-    /// <summary>HNSW search beam width (the EF in <c>&lt;|K,EF|&gt;</c>). Null = server default. Indexed path only.</summary>
+    /// <summary>
+    /// HNSW search beam width (the EF in <c>&lt;|K,EF|&gt;</c>), indexed path only.
+    /// Null falls back to <c>max(K, 40)</c> — SurrealDB 3.x rejects the bare
+    /// <c>&lt;|K|&gt;</c> form, so an EF is always emitted. Raise it for better
+    /// recall, never below <see cref="K"/>.
+    /// </summary>
     public int? Ef { get; set; }
 
     /// <summary>

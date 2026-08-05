@@ -31,6 +31,10 @@
          regression test (LiveReconcileTests) — it drives introspect+diff+
          OVERWRITE against the live instance via the Schema HttpConnectionAdapter. -->
     <ProjectReference Include="../../src/SurrealForge.Schema/SurrealForge.Schema.csproj" />
+    <!-- Vector package is exercised here by LiveVectorSearchTests — the KNN and
+         brute-force SQL it generates is only ever proven by a real server
+         parsing and executing it (unit tests assert the string shape only). -->
+    <ProjectReference Include="../../src/SurrealForge.Vector/SurrealForge.Vector.csproj" />
   </ItemGroup>
 
 </Project>

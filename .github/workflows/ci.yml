@@ -25,9 +25,39 @@ jobs:
       - name: Build
         run: dotnet build SurrealForge.slnx -c Release --no-restore
 
-      # Integration tests need a live SurrealDB and self-skip without one,
-      # so the default filter excludes them from the hosted CI run.
+      # Integration tests need a live SurrealDB, so they run in their own step
+      # below against a real server rather than self-skipping here.
       - name: Test (unit)
         run: >
           dotnet test SurrealForge.slnx -c Release --no-build
           --filter "FullyQualifiedName!~IntegrationTests"
+
+      # Pinned rather than :latest so a SurrealDB release cannot redden an
+      # unrelated PR. Bump deliberately — server-version drift is exactly what
+      # this step exists to catch (SurrealDB 3.x dropping the bare `<|K|>` KNN
+      # operator only ever surfaced against a real parser).
+      - name: Start SurrealDB
+        run: |
+          docker run -d --name surrealdb-ci -p 8000:8000 \
+            surrealdb/surrealdb:v3.2.4 \
+            start --user root --pass root --bind 0.0.0.0:8000
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8000/health > /dev/null; then
+              echo "SurrealDB ready after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "SurrealDB failed to become healthy"; docker logs surrealdb-ci; exit 1
+
+      - name: Test (integration, live SurrealDB)
+        env:
+          SURREALFORGE_TEST_ENDPOINT: http://127.0.0.1:8000
+          SURREALFORGE_TEST_USER: root
+          SURREALFORGE_TEST_PASS: root
+        run: >
+          dotnet test SurrealForge.slnx -c Release --no-build
+          --filter "FullyQualifiedName~IntegrationTests"
+
+      - name: Stop SurrealDB
+        if: always()
+        run: docker rm -f surrealdb-ci

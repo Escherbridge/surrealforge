@@ -27,14 +27,26 @@ public sealed class VectorSearchQueryShapeTests
         return fake.Queries[0];
     }
 
+    // SurrealDB 3.x rejects the bare `<|K|>` form outright ("no longer
+    // supported"), so an EF is always emitted — unset EF falls back to
+    // max(K, 40). Regression cover for the live-verified 0.5.0 fix.
     [Fact]
-    public async Task Indexed_knn_emits_operator_with_k_and_orders_by_dist()
+    public async Task Indexed_knn_without_ef_defaults_beam_width_and_orders_by_dist()
     {
         var q = await CaptureAsync(new VectorSearchOptions { K = 5 });
 
         q.Sql.Should().Be(
             "SELECT *, vector::distance::knn() AS dist FROM document " +
-            "WHERE embedding <|5|> $q ORDER BY dist");
+            "WHERE embedding <|5,40|> $q ORDER BY dist");
+    }
+
+    [Fact]
+    public async Task Indexed_knn_default_ef_never_drops_below_k()
+    {
+        var q = await CaptureAsync(new VectorSearchOptions { K = 128 });
+
+        q.Sql.Should().Contain("embedding <|128,128|> $q",
+            "a beam width below K cannot reliably return K neighbours");
     }
 
     [Fact]
@@ -65,7 +77,7 @@ public sealed class VectorSearchQueryShapeTests
 
         q.Sql.Should().Be(
             "SELECT *, vector::distance::knn() AS dist FROM document " +
-            "WHERE embedding <|3|> $q AND (status = $status) ORDER BY dist");
+            "WHERE embedding <|3,40|> $q AND (status = $status) ORDER BY dist");
         q.Params.Should().ContainKey("status").WhoseValue.Should().Be("published");
     }
 
